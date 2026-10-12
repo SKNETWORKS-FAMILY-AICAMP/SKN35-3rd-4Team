@@ -1,0 +1,14 @@
+[project]
+name = "skn35-3rd-4team"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "wsc9150", email = "wsc9150@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=1.4.4",
+    "langgraph>=1.2.14",
+    "pydantic>=2.14.1",
+]
