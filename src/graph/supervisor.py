@@ -1,4 +1,4 @@
-from graph.state import MigrateState
+from src.graph.state import MigrateState
 from langgraph.graph import StateGraph, START, END
 
 builder = StateGraph(MigrateState)
