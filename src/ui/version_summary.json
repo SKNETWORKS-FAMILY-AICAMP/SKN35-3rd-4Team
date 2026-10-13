@@ -1,0 +1,402 @@
+{
+ "source": "2번 브랜치 data/processed/import_map.jsonl 요약 (2026-10-13)",
+ "latest": {
+  "langchain": "1.4.4",
+  "langchain-core": "1.6.10"
+ },
+ "targets": [
+  "1.x"
+ ],
+ "versions": [
+  {
+   "version": "0.0.300",
+   "total": 6692,
+   "kinds": {
+    "native": 5211,
+    "classic_fallback": 1073,
+    "unresolved": 408
+   },
+   "areas": [
+    {
+     "name": "agents",
+     "total": 887,
+     "kinds": {
+      "classic_fallback": 300,
+      "native": 503,
+      "unresolved": 84
+     }
+    },
+    {
+     "name": "chains",
+     "total": 802,
+     "kinds": {
+      "classic_fallback": 390,
+      "native": 379,
+      "unresolved": 33
+     }
+    },
+    {
+     "name": "document_loaders",
+     "total": 770,
+     "kinds": {
+      "native": 760,
+      "unresolved": 10
+     }
+    },
+    {
+     "name": "tools",
+     "total": 690,
+     "kinds": {
+      "native": 590,
+      "unresolved": 91,
+      "classic_fallback": 9
+     }
+    },
+    {
+     "name": "llms",
+     "total": 496,
+     "kinds": {
+      "native": 453,
+      "classic_fallback": 2,
+      "unresolved": 41
+     }
+    },
+    {
+     "name": "vectorstores",
+     "total": 455,
+     "kinds": {
+      "native": 430,
+      "unresolved": 24,
+      "classic_fallback": 1
+     }
+    },
+    {
+     "name": "retrievers",
+     "total": 427,
+     "kinds": {
+      "native": 376,
+      "classic_fallback": 43,
+      "unresolved": 8
+     }
+    },
+    {
+     "name": "callbacks",
+     "total": 361,
+     "kinds": {
+      "native": 306,
+      "classic_fallback": 8,
+      "unresolved": 47
+     }
+    }
+   ]
+  },
+  {
+   "version": "0.0.354",
+   "total": 4916,
+   "kinds": {
+    "native": 3681,
+    "classic_fallback": 1170,
+    "unresolved": 65
+   },
+   "areas": [
+    {
+     "name": "chains",
+     "total": 882,
+     "kinds": {
+      "classic_fallback": 425,
+      "native": 434,
+      "unresolved": 23
+     }
+    },
+    {
+     "name": "agents",
+     "total": 729,
+     "kinds": {
+      "classic_fallback": 294,
+      "native": 425,
+      "unresolved": 10
+     }
+    },
+    {
+     "name": "tools",
+     "total": 420,
+     "kinds": {
+      "native": 414,
+      "classic_fallback": 6
+     }
+    },
+    {
+     "name": "document_loaders",
+     "total": 407,
+     "kinds": {
+      "native": 406,
+      "unresolved": 1
+     }
+    },
+    {
+     "name": "retrievers",
+     "total": 380,
+     "kinds": {
+      "native": 332,
+      "classic_fallback": 44,
+      "unresolved": 4
+     }
+    },
+    {
+     "name": "schema",
+     "total": 236,
+     "kinds": {
+      "native": 217,
+      "classic_fallback": 19
+     }
+    },
+    {
+     "name": "evaluation",
+     "total": 227,
+     "kinds": {
+      "classic_fallback": 170,
+      "native": 57
+     }
+    },
+    {
+     "name": "vectorstores",
+     "total": 203,
+     "kinds": {
+      "native": 197,
+      "unresolved": 5,
+      "classic_fallback": 1
+     }
+    }
+   ]
+  },
+  {
+   "version": "0.1.20",
+   "total": 4951,
+   "kinds": {
+    "native": 3685,
+    "classic_fallback": 1210,
+    "unresolved": 56
+   },
+   "areas": [
+    {
+     "name": "chains",
+     "total": 939,
+     "kinds": {
+      "classic_fallback": 452,
+      "native": 468,
+      "unresolved": 19
+     }
+    },
+    {
+     "name": "agents",
+     "total": 671,
+     "kinds": {
+      "classic_fallback": 307,
+      "native": 364
+     }
+    },
+    {
+     "name": "retrievers",
+     "total": 446,
+     "kinds": {
+      "native": 398,
+      "classic_fallback": 48
+     }
+    },
+    {
+     "name": "tools",
+     "total": 422,
+     "kinds": {
+      "native": 416,
+      "classic_fallback": 6
+     }
+    },
+    {
+     "name": "document_loaders",
+     "total": 407,
+     "kinds": {
+      "native": 407
+     }
+    },
+    {
+     "name": "schema",
+     "total": 249,
+     "kinds": {
+      "native": 217,
+      "classic_fallback": 19,
+      "unresolved": 13
+     }
+    },
+    {
+     "name": "evaluation",
+     "total": 221,
+     "kinds": {
+      "classic_fallback": 170,
+      "native": 51
+     }
+    },
+    {
+     "name": "vectorstores",
+     "total": 202,
+     "kinds": {
+      "native": 198,
+      "classic_fallback": 2,
+      "unresolved": 2
+     }
+    }
+   ]
+  },
+  {
+   "version": "0.2.17",
+   "total": 4688,
+   "kinds": {
+    "native": 3444,
+    "classic_fallback": 1210,
+    "unresolved": 34
+   },
+   "areas": [
+    {
+     "name": "chains",
+     "total": 834,
+     "kinds": {
+      "classic_fallback": 443,
+      "native": 391
+     }
+    },
+    {
+     "name": "agents",
+     "total": 668,
+     "kinds": {
+      "classic_fallback": 307,
+      "native": 361
+     }
+    },
+    {
+     "name": "tools",
+     "total": 419,
+     "kinds": {
+      "native": 413,
+      "classic_fallback": 6
+     }
+    },
+    {
+     "name": "document_loaders",
+     "total": 407,
+     "kinds": {
+      "native": 407
+     }
+    },
+    {
+     "name": "retrievers",
+     "total": 278,
+     "kinds": {
+      "native": 229,
+      "classic_fallback": 49
+     }
+    },
+    {
+     "name": "schema",
+     "total": 249,
+     "kinds": {
+      "native": 217,
+      "classic_fallback": 19,
+      "unresolved": 13
+     }
+    },
+    {
+     "name": "evaluation",
+     "total": 222,
+     "kinds": {
+      "classic_fallback": 170,
+      "native": 52
+     }
+    },
+    {
+     "name": "vectorstores",
+     "total": 203,
+     "kinds": {
+      "native": 199,
+      "classic_fallback": 2,
+      "unresolved": 2
+     }
+    }
+   ]
+  },
+  {
+   "version": "0.3.30",
+   "total": 4681,
+   "kinds": {
+    "native": 3438,
+    "classic_fallback": 1209,
+    "unresolved": 34
+   },
+   "areas": [
+    {
+     "name": "chains",
+     "total": 831,
+     "kinds": {
+      "classic_fallback": 443,
+      "native": 388
+     }
+    },
+    {
+     "name": "agents",
+     "total": 668,
+     "kinds": {
+      "classic_fallback": 307,
+      "native": 361
+     }
+    },
+    {
+     "name": "tools",
+     "total": 419,
+     "kinds": {
+      "native": 413,
+      "classic_fallback": 6
+     }
+    },
+    {
+     "name": "document_loaders",
+     "total": 407,
+     "kinds": {
+      "native": 407
+     }
+    },
+    {
+     "name": "retrievers",
+     "total": 278,
+     "kinds": {
+      "native": 229,
+      "classic_fallback": 49
+     }
+    },
+    {
+     "name": "schema",
+     "total": 249,
+     "kinds": {
+      "native": 217,
+      "classic_fallback": 19,
+      "unresolved": 13
+     }
+    },
+    {
+     "name": "evaluation",
+     "total": 221,
+     "kinds": {
+      "classic_fallback": 169,
+      "native": 52
+     }
+    },
+    {
+     "name": "vectorstores",
+     "total": 203,
+     "kinds": {
+      "native": 199,
+      "classic_fallback": 2,
+      "unresolved": 2
+     }
+    }
+   ]
+  }
+ ]
+}
