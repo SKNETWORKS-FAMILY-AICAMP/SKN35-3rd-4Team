@@ -1,7 +1,7 @@
 """LangChain 마이그레이션 챗봇 화면 (4번 화면 · 평가).
 
-실행 (프로젝트 루트에서):
-    uv add streamlit streamlit-agraph   # 팀 저장소에서는 1번과 상의 후
+실행 (프로젝트 루트에서, 자세한 방법은 docs/화면_실행방법.md):
+    uv pip install streamlit streamlit-agraph
     uv run streamlit run app.py
 
 흐름: ① 시작 화면(버전 마인드맵에서 옛 버전 고르기, 모르면 자동 감지)
@@ -297,6 +297,6 @@ with about_tab:
         "| ② retriever | 이사 목록 · 문서에서 근거 찾기 | 2번 |\n"
         "| ③ rewriter | 근거를 보고 코드 다시 쓰기 | 3번 |\n"
         "| ④ verifier | 실행해서 확인, 실패하면 ②로 | 3번 |\n"
-        "| ⑤ report | 결과 정리 | 미정 |\n"
+        "| ⑤ report | 결과 정리 | – |\n"
         "| 연결 | 단계 잇기, 다시 할지 판단 | 1번 |\n"
         "| 화면 · 평가 | 보여 주기, 일반 AI와 비교 | 4번 |")
