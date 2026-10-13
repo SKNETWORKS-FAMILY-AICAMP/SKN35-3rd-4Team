@@ -18,27 +18,27 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from . import (
-    CANDIDATES, CHUNKS_PATH, DEFAULT_K, DOC_SOURCES, ERA_WEIGHT, FUZZY_MAP_K, IMPORT_LINK_BOOST,
+    CANDIDATES, CHUNKS_PATH, DEFAULT_K, DOC_REF_BOOST, DOC_SOURCES, ERA_WEIGHT, FUZZY_MAP_K, IMPORT_LINK_BOOST,
     MAX_PER_PAGE, RRF_K,
 )
 from .bm25 import BM25
-from .import_lookup import MapHit, lookup, parse_import_paths
+from .import_lookup import MapHit, lookup, lookup_methods, parse_import_paths
 
 
 @dataclass
 class Evidence:
     evidence_id: str
-    source: str                 # import_map | latest_docs | migration_guide
-    match: str                  # exact | fuzzy_map | hybrid
+    source: str                 # import_map | method_map | latest_docs | migration_guide
+    match: str                  # exact | exact_method | fuzzy_map | hybrid
     score: float
     text: str
     era: str | None = None
     url: str | None = None
     title: str | None = None
     section: str | None = None
-    old: str | None = None      # 대응표 근거: 사용자 코드의 경로
-    new: str | None = None      # 대응표 근거: 1.x 경로 (unresolved 면 None)
-    kind: str | None = None     # native | classic_fallback | unresolved
+    old: str | None = None      # 대응표 근거: 사용자 코드의 경로 / 메서드 근거: Class.method
+    new: str | None = None      # 대응표 근거: 1.x 경로 (unresolved 면 None) / 메서드 근거: 대체 메서드
+    kind: str | None = None     # native | classic_fallback | unresolved / 메서드: removed | deprecated | exists
     import_status: str | None = None
     alternative: str | None = None
     signals: list[str] = field(default_factory=list)   # 재정렬 근거 (디버깅용)
@@ -102,6 +102,9 @@ class RetrievalEngine:
         self.doc_ids = [c["chunk_id"] for c in chunks if c["source"] in DOC_SOURCES]
         self.map_ids = [c["chunk_id"] for c in chunks if c["source"] == "import_map"]
         self.doc_bm25 = BM25([self.chunks[i]["text"] for i in self.doc_ids])
+        self.page_doc_idx: dict[str, set[int]] = defaultdict(set)  # 문서 페이지 → doc_ids 인덱스
+        for idx, chunk_id in enumerate(self.doc_ids):
+            self.page_doc_idx[self.chunks[chunk_id]["path"]].add(idx)
         self.map_bm25 = BM25([self.chunks[i]["text"] for i in self.map_ids])
         # 청크가 실제로 import 하는 경로 (정답 import 를 쓰는 문서 가산용)
         self.chunk_import_keys = {
@@ -143,6 +146,15 @@ class RetrievalEngine:
             signals=["via_module"] if hit.via_module else [],
         )
 
+    def _method_evidence(self, rec: dict) -> Evidence:
+        chunk = self.chunks.get(rec["id"], {})
+        return Evidence(
+            evidence_id=rec["id"], source="method_map", match="exact_method", score=1.0,
+            text=chunk.get("text", ""), era="1.x", old=f"{rec['class']}.{rec['method']}",
+            new=rec.get("alternative"), kind=rec["status_1x"], alternative=rec.get("note"),
+            signals=[rec["call"]],
+        )
+
     def _doc_evidence(self, chunk_id: str, score: float, signals: list[str]) -> Evidence:
         c = self.chunks[chunk_id]
         return Evidence(
@@ -174,6 +186,11 @@ class RetrievalEngine:
             elif hit.record["id"] not in exclude_ids:
                 map_evidence.append(self._map_evidence(hit, "exact", 1.0))
 
+        # ①-2 메서드 호출 정확매칭 (chain.run(), llm.predict(), llm("...") 등)
+        method_hits = [r for r in lookup_methods(query) if r["id"] not in exclude_ids]
+        method_evidence = [self._method_evidence(r) for r in method_hits]
+        doc_refs = {p for r in method_hits for p in r.get("doc_refs", [])}
+
         # ③ 못 찾은 경로는 대응표 유사 검색 (같은 1.x 경로는 하나만)
         for path in unmatched:
             seen_new = set()
@@ -195,8 +212,17 @@ class RetrievalEngine:
         # ② 문서 하이브리드 검색 (정확매칭된 1.x 경로·대안 텍스트로 질의 확장)
         exact = [e for e in map_evidence if e.match == "exact"]
         expansion = [e.new for e in exact if e.new] + [e.alternative for e in exact if e.alternative]
+        expansion += [r["alternative"] for r in method_hits if r.get("alternative")]
         doc_query = "\n".join([query, *expansion])
         scores = self._hybrid(doc_query, DOC_SOURCES, CANDIDATES * width)
+        # 메서드 대응표가 지정한 근거 페이지는 그 페이지에서 질의와 가장 맞는 청크를 상위권 점수로 올린다
+        # (직접 고른 공식 근거라 후보 순위에 묻히지 않게)
+        anchor = max(scores.values(), default=1 / (RRF_K + 1))
+        for page in doc_refs:
+            best = self.doc_bm25.search(doc_query, 1, only=self.page_doc_idx.get(page, set()))
+            if best:
+                chunk_id = self.doc_ids[best[0][0]]
+                scores[chunk_id] = max(scores.get(chunk_id, 0.0), anchor)
 
         # ④ 규칙 기반 재정렬
         target_keys = {loose_key(e.new) for e in exact if e.new}
@@ -212,6 +238,9 @@ class RetrievalEngine:
             if target_keys & self.chunk_import_keys.get(chunk_id, set()):
                 score *= IMPORT_LINK_BOOST
                 signals.append("uses_target_import")
+            if self.chunks[chunk_id]["path"] in doc_refs:
+                score *= DOC_REF_BOOST
+                signals.append("method_doc_ref")
             ranked.append((chunk_id, score, signals))
         ranked.sort(key=lambda x: -x[1])
 
@@ -226,7 +255,7 @@ class RetrievalEngine:
             if len(doc_evidence) >= k * width:
                 break
 
-        return map_evidence + doc_evidence
+        return map_evidence + method_evidence + doc_evidence
 
 
 def main():
@@ -244,7 +273,9 @@ def main():
         print(json.dumps([e.to_dict() for e in results], ensure_ascii=False, indent=2))
         return
     for e in results:
-        if e.source == "import_map":
+        if e.source == "method_map":
+            print(f"[{e.match}] {e.evidence_id}  {e.old} {e.signals[0]} → {e.new} ({e.kind})")
+        elif e.source == "import_map":
             print(f"[{e.match}] {e.evidence_id}  {e.old} → {e.new} ({e.kind}, {e.import_status})"
                   + (f"  대안: {e.alternative}" if e.alternative else "") + (f"  {e.signals}" if e.signals else ""))
         else:

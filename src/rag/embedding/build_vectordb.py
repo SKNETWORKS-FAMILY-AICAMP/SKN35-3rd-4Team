@@ -23,6 +23,7 @@ from . import (
 METADATA_FIELDS = [
     "source", "era", "url", "path", "title", "section", "doc_section", "group",
     "old", "new", "kind", "import_status", "seen_in", "imports", "packages", "has_code", "chars",
+    "class", "method", "status_1x", "doc_refs",
 ]
 SMOKE_QUERIES = [
     "from langchain.chains import LLMChain",

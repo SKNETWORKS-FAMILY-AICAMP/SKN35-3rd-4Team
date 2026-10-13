@@ -105,6 +105,28 @@ def runtime_statements(body: list[ast.stmt]):
             yield stmt
 
 
+def class_methods(node: ast.ClassDef) -> dict:
+    """클래스 본문에 정의된 공개 메서드(+ __call__) 이름과, 그중 @deprecated 메서드 정보.
+
+    1.x 에서 메서드가 남아 있는지 확인하고(methods), 구버전 메서드 대응표를 만드는 데(deprecated_methods) 쓴다.
+    상속받은 메서드는 정의한 클래스(BaseLLM 등) 쪽에 기록된다.
+    """
+    methods, deprecated = [], {}
+    for item in node.body:
+        if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if item.name.startswith("_") and item.name != "__call__":
+            continue
+        methods.append(item.name)
+        dep = deprecation_info(item.decorator_list)
+        if dep is not None:
+            deprecated[item.name] = dep
+    out = {"methods": sorted(set(methods))}
+    if deprecated:
+        out["deprecated_methods"] = deprecated
+    return out
+
+
 def extract_module(module: str, is_package: bool, source: str) -> list[dict]:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SyntaxWarning)  # 대상 소스의 docstring escape 경고
@@ -145,6 +167,8 @@ def extract_module(module: str, is_package: bool, source: str) -> list[dict]:
             rec = {"type": "class" if isinstance(stmt, ast.ClassDef) else "function"}
             if dep is not None:
                 rec["deprecated"] = dep
+            if isinstance(stmt, ast.ClassDef):
+                rec.update(class_methods(stmt))
             add(stmt.name, "def", **rec)
         elif isinstance(stmt, ast.ImportFrom):
             for local, target in import_from(stmt):
@@ -218,7 +242,8 @@ def main():
         records = extract_package(package, version)
         write_jsonl(symbols_path(package, version), records)
         deprecated = sum("deprecated" in r for r in records)
-        print(f"{package}=={version}: {len(records)} symbols, {deprecated} deprecated")
+        dep_methods = sum(len(r.get("deprecated_methods", {})) for r in records)
+        print(f"{package}=={version}: {len(records)} symbols, {deprecated} deprecated, {dep_methods} deprecated methods")
 
 
 if __name__ == "__main__":

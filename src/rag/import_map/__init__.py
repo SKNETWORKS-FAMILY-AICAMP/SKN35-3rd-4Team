@@ -9,6 +9,7 @@
     data/raw/symbols/{패키지}-{버전}.jsonl   패키지·버전별 심볼 목록
     data/raw/cli_mappings.jsonl             langchain-cli migrate 매핑
     data/processed/import_map.jsonl         최종 대응표 (레코드마다 고정 id)
+    data/processed/method_map.jsonl         메서드 대응표 (chain.run() → invoke 등)
 """
 
 from pathlib import Path
@@ -18,6 +19,7 @@ RAW_DIR = ROOT / "data" / "raw"
 SYMBOLS_DIR = RAW_DIR / "symbols"
 CLI_MAPPINGS_PATH = RAW_DIR / "cli_mappings.jsonl"
 IMPORT_MAP_PATH = ROOT / "data" / "processed" / "import_map.jsonl"
+METHOD_MAP_PATH = ROOT / "data" / "processed" / "method_map.jsonl"
 
 # 구버전: 사용자 코드에 등장할 수 있는 경로의 출처
 OLD_VERSIONS: dict[str, list[str]] = {

@@ -43,11 +43,16 @@ class BM25:
         df = len(self.postings.get(term, ()))
         return math.log(1 + (self.n - df + 0.5) / (df + 0.5))
 
-    def search(self, query: str, k: int) -> list[tuple[int, float]]:
+    def scores(self, query: str, only: set[int] | None = None) -> dict[int, float]:
         scores: dict[int, float] = defaultdict(float)
         for term in set(tokenize(query)):
             idf = self.idf(term)
             for i, tf in self.postings.get(term, ()):
+                if only is not None and i not in only:
+                    continue
                 norm = tf + BM25_K1 * (1 - BM25_B + BM25_B * self.doc_len[i] / self.avg_len)
                 scores[i] += idf * tf * (BM25_K1 + 1) / norm
-        return sorted(scores.items(), key=lambda x: -x[1])[:k]
+        return scores
+
+    def search(self, query: str, k: int, only: set[int] | None = None) -> list[tuple[int, float]]:
+        return sorted(self.scores(query, only).items(), key=lambda x: -x[1])[:k]

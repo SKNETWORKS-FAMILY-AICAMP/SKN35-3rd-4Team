@@ -10,6 +10,9 @@
 P 자체가 1.x에 그대로 있으면 대응표에서 제외한다.
 
 마지막에 1.x 패키지를 설치한 임시 환경(uv --isolated)에서 new 경로를 실제로 import 해 본다.
+
+메서드 대응표(method_map.jsonl)도 함께 만든다: 구버전 클래스의 @deprecated 메서드(chain.run 등)를
+1.x 클래스와 대조해 removed / deprecated / exists 를 판정하고, manual_method_map 의 보강분을 더한다.
 """
 
 import hashlib
@@ -20,8 +23,11 @@ import sys
 import tempfile
 from collections import Counter, defaultdict
 
-from . import CLI_MAPPINGS_PATH, IMPORT_MAP_PATH, OLD_VERSIONS, PYTHON_VERSION, TARGET_VERSIONS, symbols_path
+from . import (
+    CLI_MAPPINGS_PATH, IMPORT_MAP_PATH, METHOD_MAP_PATH, OLD_VERSIONS, PYTHON_VERSION, TARGET_VERSIONS, symbols_path,
+)
 from .extract_symbols import write_jsonl
+from .manual_method_map import MANUAL_METHODS, METHOD_NOTES
 
 TARGET_MODULES = {p.replace("-", "_") for p in TARGET_VERSIONS}
 MAX_DEPTH = 12
@@ -89,6 +95,19 @@ class SymbolTable:
                 return rec["deprecated"]
             if rec.get("deprecated_lookup"):
                 return {"lookup": True}
+            if "target" not in rec:
+                return None
+            path = rec["target"]
+        return None
+
+    def definition(self, path: str) -> dict | None:
+        """re-export 를 따라가 같은 테이블 안의 정의(def) 레코드를 찾는다."""
+        seen = set()
+        while path in self.by_path and path not in seen:
+            seen.add(path)
+            rec = self.by_path[path][0]
+            if rec["kind"] == "def":
+                return rec
             if "target" not in rec:
                 return None
             path = rec["target"]
@@ -193,7 +212,7 @@ def check_imports(records: list[dict]) -> dict[str, str | None]:
             return json.load(f)
 
 
-def build(skip_import_check: bool = False) -> list[dict]:
+def load_resolver() -> "Resolver":
     old, target = SymbolTable(), SymbolTable()
     for package, versions in OLD_VERSIONS.items():
         for version in versions:
@@ -203,7 +222,12 @@ def build(skip_import_check: bool = False) -> list[dict]:
     old.finalize()
     target.finalize()
     cli_symbol, cli_module = load_cli()
-    resolver = Resolver(old, target, cli_symbol, cli_module)
+    return Resolver(old, target, cli_symbol, cli_module)
+
+
+def build(resolver: "Resolver", skip_import_check: bool = False) -> list[dict]:
+    old, target = resolver.old, resolver.target
+    cli_symbol, cli_module = resolver.cli_symbol, resolver.cli_module
 
     shim_paths = {f"{m}.{n}" for m in cli_module if m.endswith(".pydantic_v1") for n in PYDANTIC_V1_NAMES}
     starts = set(old.by_path) | set(cli_symbol) | shim_paths
@@ -265,12 +289,95 @@ def import_status(new: str, err: str | None) -> str:
     return "error"
 
 
+def method_id(key: str) -> str:
+    return "mmap-" + hashlib.sha1(key.encode()).hexdigest()[:10]
+
+
+def call_form(method: str) -> str:
+    return "obj(...)" if method == "__call__" else f".{method}(...)"
+
+
+def build_method_map(resolver: "Resolver") -> list[dict]:
+    """구버전 클래스의 @deprecated 메서드 → 1.x 상태(removed / deprecated / exists) + 직접 보강분."""
+    old, target = resolver.old, resolver.target
+    records = []
+    for class_path, versions in sorted(old.by_path.items()):
+        latest = versions[0]  # 최신 구버전 레코드
+        deprecated_methods: dict[str, dict] = {}
+        for rec in reversed(versions):  # 오래된 버전부터 덮어써서 최신 정보가 남게
+            deprecated_methods.update(rec.get("deprecated_methods", {}))
+        if latest.get("type") != "class" or not deprecated_methods:
+            continue
+
+        if class_path in target:
+            class_new = class_path
+        else:
+            class_new = resolver.resolve(class_path)["new"]
+        definition = target.definition(class_new) if class_new else None
+
+        for method, dep in sorted(deprecated_methods.items()):
+            if definition is None:
+                status = "removed"  # 클래스 자체가 1.x 에 없음
+            elif method in definition.get("deprecated_methods", {}):
+                status = "deprecated"
+            elif method in definition.get("methods", []):
+                status = "exists"
+            else:
+                status = "removed"
+            extra = METHOD_NOTES.get(method, {})
+            records.append({
+                "id": method_id(f"{class_path}.{method}"),
+                "class": latest["name"],
+                "classes": [latest["name"]],
+                "class_path": class_path,
+                "class_new": class_new,
+                "method": method,
+                "call": call_form(method),
+                "alternative": dep.get("alternative"),
+                "since": dep.get("since"),
+                "removal": dep.get("removal"),
+                "status_1x": status,
+                "note": extra.get("note"),
+                "doc_refs": extra.get("doc_refs", []),
+                "source": "deprecated",
+                "seen_in": sorted({f"{r['package']}=={r['version']}" for r in versions
+                                   if method in r.get("deprecated_methods", {})}),
+            })
+
+    for item in MANUAL_METHODS:
+        records.append({
+            "id": method_id(f"manual:{item['class']}.{item['method']}"),
+            "class": item["class"],
+            "classes": item["classes"],
+            "class_path": None,
+            "class_new": None,
+            "method": item["method"],
+            "call": call_form(item["method"]),
+            "alternative": item["alternative"],
+            "since": None,
+            "removal": None,
+            "status_1x": "deprecated",
+            "note": item["note"],
+            "doc_refs": item["doc_refs"],
+            "source": "manual",
+            "seen_in": [],
+        })
+    return records
+
+
 def main():
-    records = build(skip_import_check="--skip-import-check" in sys.argv)
+    resolver = load_resolver()
+    records = build(resolver, skip_import_check="--skip-import-check" in sys.argv)
     write_jsonl(IMPORT_MAP_PATH, records)
     print(f"{IMPORT_MAP_PATH.relative_to(IMPORT_MAP_PATH.parents[2])}: {len(records)} records")
     print("  kind:", dict(Counter(r["kind"] for r in records)))
     print("  import_status:", dict(Counter(str(r["import_status"]) for r in records)))
+
+    methods = build_method_map(resolver)
+    write_jsonl(METHOD_MAP_PATH, methods)
+    print(f"{METHOD_MAP_PATH.relative_to(METHOD_MAP_PATH.parents[2])}: {len(methods)} records")
+    print("  status_1x:", dict(Counter(r["status_1x"] for r in methods)))
+    print("  source:", dict(Counter(r["source"] for r in methods)))
 
 
 if __name__ == "__main__":

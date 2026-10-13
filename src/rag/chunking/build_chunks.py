@@ -1,9 +1,9 @@
 """대응표·최신 문서·구버전 가이드를 청크로 나누고 메타데이터를 붙여 chunks.jsonl 하나로 쓴다.
 
 청크 레코드 공통 필드:
-    chunk_id   대응표는 imap-… (state.py의 evidence_id와 동일), 문서는 doc-<해시>
+    chunk_id   대응표는 imap-… (state.py의 evidence_id와 동일), 메서드 대응표는 mmap-…, 문서는 doc-<해시>
                (페이지 경로 + 제목 경로 + 순번 기준이라 재수집해도 같은 위치면 같은 ID)
-    source     import_map | latest_docs | migration_guide
+    source     import_map | method_map | latest_docs | migration_guide
     era        1.x | 0.3
     text       임베딩·검색에 쓰는 본문 (문서 청크는 "제목 > 섹션" 머리줄 포함)
     imports    청크 코드블록 안의 langchain/langgraph import 문
@@ -16,7 +16,7 @@ import re
 from collections import Counter
 
 from . import (
-    CHUNKS_PATH, IMPORT_MAP_PATH, LATEST_MANIFEST_PATH, MAX_CHARS, MIGRATION_MANIFEST_PATH,
+    CHUNKS_PATH, IMPORT_MAP_PATH, LATEST_MANIFEST_PATH, MAX_CHARS, METHOD_MAP_PATH, MIGRATION_MANIFEST_PATH,
     MIGRATION_MAX_CHARS, MIGRATION_WHOLE_PAGE_MAX, MIN_CHARS, ROOT,
 )
 from .clean_mdx import FENCE, clean
@@ -270,8 +270,46 @@ def import_map_records() -> list[dict]:
     return records
 
 
+def method_map_records() -> list[dict]:
+    status_text = {
+        "removed": "removed in LangChain 1.x (calling it raises an error)",
+        "deprecated": "deprecated (still works only in the legacy/classic class)",
+        "exists": "still available",
+    }
+    records = []
+    for r in load_jsonl(METHOD_MAP_PATH):
+        owner = r["class_path"] or ", ".join(r["classes"])
+        lines = [f"Legacy method call: {r['call']} on {r['class']} ({owner})",
+                 f"LangChain 1.x status: {status_text[r['status_1x']]}"]
+        if r.get("alternative"):
+            lines.append(f"Replacement: {r['alternative']}")
+        if r.get("removal"):
+            lines.append(f"Removal: {r['removal']}")
+        if r.get("note"):
+            lines.append(f"Note: {r['note']}")
+        text = "\n".join(lines)
+        records.append({
+            "chunk_id": r["id"],
+            "source": "method_map",
+            "era": "1.x",
+            "text": text,
+            "class": r["class"],
+            "classes": r["classes"],
+            "method": r["method"],
+            "status_1x": r["status_1x"],
+            "alternative": r.get("alternative"),
+            "doc_refs": r.get("doc_refs", []),
+            "imports": [],
+            "packages": [],
+            "has_code": False,
+            "chars": len(text),
+        })
+    return records
+
+
 def main():
     chunks = import_map_records()
+    chunks += method_map_records()
     chunks += doc_records(LATEST_MANIFEST_PATH, "latest_docs")
     chunks += doc_records(MIGRATION_MANIFEST_PATH, "migration_guide")
 
@@ -286,7 +324,7 @@ def main():
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
 
     print(f"{CHUNKS_PATH.relative_to(ROOT)}: {len(chunks)} chunks")
-    for source in ("import_map", "latest_docs", "migration_guide"):
+    for source in ("import_map", "method_map", "latest_docs", "migration_guide"):
         sizes = sorted(c["chars"] for c in chunks if c["source"] == source)
         print(f"  {source}: {len(sizes)}개, 길이 중간값 {sizes[len(sizes) // 2]}, "
               f"최대 {sizes[-1]}, {MAX_CHARS}자 초과 {sum(s > MAX_CHARS for s in sizes)}개")
