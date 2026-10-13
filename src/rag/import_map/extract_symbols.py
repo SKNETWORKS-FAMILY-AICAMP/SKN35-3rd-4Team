@@ -29,7 +29,7 @@ def open_wheel(package: str, version: str) -> zipfile.ZipFile:
         meta = json.load(resp)
     urls = [u["url"] for u in meta["urls"] if u["filename"].endswith(".whl")]
     if not urls:
-        raise RuntimeError(f"{package}=={version}: wheel 없음")
+        raise RuntimeError(f"{package}=={version}: no wheel found")
     with urllib.request.urlopen(urls[0]) as resp:
         return zipfile.ZipFile(io.BytesIO(resp.read()))
 
