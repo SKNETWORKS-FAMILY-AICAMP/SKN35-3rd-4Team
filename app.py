@@ -21,6 +21,7 @@ print(chain.run(product="양말"))
     print("\n[응답]")
     print(result.get("new_code") or result.get("old_code"))
     print(result.get("analysis") or None)
+    print(len(result.get("evidences", [])))
 
 if __name__ == "__main__":
     main()
