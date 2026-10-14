@@ -1,18 +1,23 @@
 from typing import Annotated, Literal, NotRequired, TypedDict
 from langgraph.graph import MessagesState
 from pydantic import BaseModel, Field
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 
 def merge_ids(left: list[str] | None, right: list[str] | None) -> list[str]:
     """재시도마다 verifier가 돌려주는 exclude_ids를 덮어쓰지 않고 누적한다(중복 제거)."""
     return sorted(set(left or []) | set(right or []))
 
-class MigrationState(TypedDict):
+class RootState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+    classification: str
+
+class MigrationState(RootState):
     question: str
     old_code: NotRequired[str]      # 사용자가 질문한 코드
     analysis: NotRequired[dict | str]      # 분석 결과 (analyzer는 dict로 넣음)
     new_code: NotRequired[str]
     evidence_id: NotRequired[str]
-    # kind: Literal["native", "classic_fallback"]
     changes: NotRequired[list[dict]] # Rewriter가 구조화 출력으로 생성한 근거 ID가 포함된 변경 목록 저장
     install_packages: NotRequired[list[str]] # 새 코드가 import하는 langchain 계열 pip 패키지 목록
     verify_result: NotRequired[dict] # Verifier 검사 결과 (passed, errors, warnings, summary). errors는 다음 시도의 피드백으로 쓰임
