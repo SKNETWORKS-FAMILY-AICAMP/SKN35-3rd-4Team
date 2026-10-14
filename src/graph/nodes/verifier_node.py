@@ -195,7 +195,12 @@ def check_legacy_imports(imports) -> tuple[list[dict], list[dict], set[str]]:
             continue
         handled.add(path)
         rec_id = hit.record["id"]
-        if hit.new is None or hit.record.get("kind") == "unresolved":
+        mapping_broken = rec_id in exclude_ids or hit.record.get("import_status") in ("error", "missing_dependency")
+        if mapping_broken:  # 대응표의 1.x 경로가 실제로 import 안 됨 → 바꿀 수 없으니 경고만
+            warnings.append(issue("mapping_unusable",
+                                  "대응표의 1.x 경로가 import 검사에서 실패해 바꾸지 않았습니다. 수동 확인이 필요합니다.",
+                                  new_line=lineno, evidence_id=rec_id, path=path))
+        elif hit.new is None or hit.record.get("kind") == "unresolved":
             warnings.append(issue("no_1x_path", "1.x 대응 경로가 없는 구버전 import입니다. 수동 확인이 필요합니다.",
                                   new_line=lineno, evidence_id=rec_id, path=path))
         else:
