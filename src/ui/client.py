@@ -5,10 +5,10 @@
 """
 
 from .mock import run_mock
-from .versions import SUMMARY, detect
+from .optional import load
+from .versions import ALL_WITH_NEW, LATEST
 
-TARGET_VERSIONS = SUMMARY["targets"]          # 지금 2번 대응표의 목표는 1.x 하나
-LATEST = SUMMARY["latest"]                    # 예: {"langchain": "1.4.4", "langchain-core": "1.6.10"}
+TARGET_VERSIONS = ALL_WITH_NEW               # 어느 버전으로든 (옛 버전으로 되돌리기 포함)
 
 
 def mode() -> str:
@@ -28,5 +28,6 @@ def run(code: str, target_version: str = TARGET_VERSIONS[0], source_version: str
     # TODO(1번 그래프 연결 후): from src.graph.supervisor import ... 로 진짜 결과 받기
     result = run_mock(code, target_version)
     result["source_version"] = source_version
-    result["detected"] = detect(code)
+    detector = load("version_detect")          # 선택 기능. 없으면 감지 결과는 비어 있음
+    result["detected"] = detector.detect(code) if detector else {"candidates": [], "clues": [], "source": None}
     return result

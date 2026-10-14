@@ -45,12 +45,28 @@ def import_paths(code: str) -> list[tuple[str, str]]:
     return out
 
 
-def find_evidence(path: str) -> dict | None:
-    """대응표에서 옛 경로를 찾는다. 2번 검색기가 있으면 실제 대응표, 없으면 예시표."""
+def find_evidence(path: str, target: str = "1.x") -> dict | None:
+    """옛 경로의 목표 버전 위치를 찾는다.
+
+    1.x 로 갈 때: 2번 import 대응표(imap-…) → 없으면 2번 버전별 도구 목록 → 없으면 예시표
+    그 밖의 버전으로 갈 때(되돌리기 포함): 2번 버전별 도구 목록 (version_map.py)
+    """
+    from .optional import load
+    vm = load("version_map")
+    if target != "1.x":
+        if vm is None or not vm.available():
+            return None
+        t = vm.translate(path, target)
+        return {"old": path, "new": t["new"], "kind": t["kind"], "evidence_id": f"ver-{target}:{t['new'] or path}",
+                "source": "version_symbols", "alternative": None, "real": True}
     try:
         from src.rag.retrieval.import_lookup import lookup  # 팀 저장소에 2번 코드가 있을 때
         hit = lookup(path)
         if hit is None:
+            if vm is not None and vm.available():
+                t = vm.translate(path, "1.x")
+                return {"old": path, "new": t["new"], "kind": t["kind"], "evidence_id": f"ver-1.x:{t['new'] or path}",
+                        "source": "version_symbols", "alternative": None, "real": True}
             return None
         rec = hit.record
         return {"old": path, "new": hit.new, "kind": rec["kind"], "evidence_id": rec["id"],
@@ -76,7 +92,7 @@ def replacement_line(ev: dict) -> str | None:
     return new_import_line(ev["new"]) if ev.get("new") else None
 
 
-def fake_rewrite(code: str, evidences: list[dict]) -> str:
+def fake_rewrite(code: str, evidences: list[dict], target: str = "1.x") -> str:
     """import 줄을 새 위치로 바꾸고, LLMChain 같은 대표 패턴만 흉내 낸다."""
     lines = []
     done = set()
@@ -94,6 +110,8 @@ def fake_rewrite(code: str, evidences: list[dict]) -> str:
                 lines.append(new)
                 done.add(new)
     out = "\n".join(lines)
+    if target != "1.x":          # LCEL · invoke 흉내는 1.x 로 갈 때만
+        return out
     out = re.sub(r"LLMChain\(\s*llm\s*=\s*(\w+)\s*,\s*prompt\s*=\s*(\w+)\s*\)", r"\2 | \1 | StrOutputParser()", out)
     out = re.sub(r"\.run\(\s*(\w+)\s*=\s*([^)]*)\)", r'.invoke({"\1": \2})', out)
     out = re.sub(r"\.run\(", ".invoke(", out)
@@ -102,41 +120,39 @@ def fake_rewrite(code: str, evidences: list[dict]) -> str:
 
 def run_mock(code: str, target_version: str) -> dict:
     """화면이 기대하는 결과 모양 (docs/화면_결과_모양.md)."""
+    from .optional import load
+    vm = load("version_map")
     evidences = []
     paths = import_paths(code)
     for line, path in paths:
-        ev = find_evidence(path)
+        ev = find_evidence(path, target_version)
         if ev:
             ev["line"] = line
             evidences.append(ev)
+    if not evidences and paths and target_version != "1.x" and (vm is None or not vm.available()):
+        message = ("1.x 가 아닌 버전으로 바꾸는 기능이 빠져 있어요 (선택 기능 src/ui/extras/version_map.py)." if vm is None else
+                   "1.x 가 아닌 버전으로 바꾸려면 2번의 버전별 도구 목록(data/raw/symbols)이 필요해요. "
+                   "팀 저장소에서 실행하면 모든 버전 방향으로 바꿀 수 있어요.")
+        return {"target_version": target_version, "original_code": code, "migrated_code": code,
+                "changes": [],
+                "verification": {"success": False, "attempts": 0, "message": message}, "mode": "mock"}
     if not evidences:
         message = ("LangChain import 줄을 찾지 못했습니다. 옛 LangChain 코드를 넣어 주세요." if not paths else
                    f"LangChain import {len(paths)}줄을 찾았지만 대응표에서 근거를 찾지 못했어요. "
                    "(지금은 예시 대응표라 일부만 있어요. 팀 저장소에서는 2번 대응표 전체를 씁니다.)")
         return {"target_version": target_version, "original_code": code, "migrated_code": code,
-                "changes": [], "steps": _steps(len(paths), ok=False),
+                "changes": [],
                 "verification": {"success": False, "attempts": 0, "message": message}, "mode": "mock"}
-    migrated = fake_rewrite(code, evidences)
+    migrated = fake_rewrite(code, evidences, target_version)
     changes = [{"old": ev["line"], "new": replacement_line(ev) or "-",
                 "kind": ev["kind"], "evidence_id": ev["evidence_id"], "source": ev["source"],
-                "alternative": ev.get("alternative"), "real_evidence": ev["real"]} for ev in evidences]
+                "alternative": ev.get("alternative"), "real_evidence": ev["real"]}
+               for ev in evidences if ev["kind"] != "same"]       # 목표 버전에도 그대로 있는 줄은 변경표에서 뺌
     has_classic = any(c["kind"] == "classic_fallback" for c in changes)
     attempts = 2 if has_classic else 1
     return {"target_version": target_version, "original_code": code, "migrated_code": migrated,
-            "changes": changes, "steps": _steps(len(evidences), ok=True, retry=has_classic),
+            "changes": changes,
             "verification": {"success": True, "attempts": attempts,
                              "message": f"{attempts}회 만에 통과 (가짜 결과)"},
             "mode": "mock+real_evidence" if any(c["real_evidence"] for c in changes) else "mock"}
 
-
-def _steps(n: int, ok: bool, retry: bool = False) -> list[dict]:
-    steps = [{"name": "① analyzer", "detail": f"import 경로 {n}개 찾음"},
-             {"name": "② retriever", "detail": "대응표 · 문서에서 근거 찾기"},
-             {"name": "③ rewriter", "detail": "근거를 보고 코드 다시 쓰기"}]
-    if retry:
-        steps += [{"name": "④ verifier", "detail": "1회차: 옛 방식(classic) 사용 → 다시 찾기"},
-                  {"name": "② retriever", "detail": "대안 문서 더 찾기"},
-                  {"name": "③ rewriter", "detail": "최신 방식으로 다시 쓰기"}]
-    steps += [{"name": "④ verifier", "detail": "실행해서 확인 → 통과" if ok else "확인할 코드 없음"},
-              {"name": "⑤ report", "detail": "결과 정리"}]
-    return steps
