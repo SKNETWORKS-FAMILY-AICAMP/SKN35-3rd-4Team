@@ -8,11 +8,9 @@ def merge_ids(left: list[str] | None, right: list[str] | None) -> list[str]:
     """재시도마다 verifier가 돌려주는 exclude_ids를 덮어쓰지 않고 누적한다(중복 제거)."""
     return sorted(set(left or []) | set(right or []))
 
-class RootState(TypedDict):
+class MigrationState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     classification: str
-
-class MigrationState(RootState):
     question: str
     old_code: NotRequired[str]      # 사용자가 질문한 코드
     analysis: NotRequired[dict | str]      # 분석 결과 (analyzer는 dict로 넣음)

@@ -66,10 +66,12 @@ if __name__ == "__main__":
     count = process_csv("inquiries.csv", "drafts.csv")
     print(f"{count}건 답변 초안 생성 완료")
 ```"""
-
+    # question = "안녕하세요."
+    question = "langchain의 개념에 대해서 설명해줘."
+    graph = supervisor()
     # supervisor = migration_pipeline()
     # result = supervisor.invoke({ "question": question })
-    result = supervisor.invoke({ "messages": [HumanMessage(content=question)] })
+    result = graph.invoke({ "messages": [HumanMessage(content=question)] })
 
     print("\n[응답]")
     print(result.get("new_code") or result.get("old_code"))
@@ -77,22 +79,22 @@ if __name__ == "__main__":
     print(len(result.get("evidences", [])))
 
     # 바꾼 줄과 근거 ID, 바꾼 이유 (조건 4)
-    print("\n[변경 내역]")
-    for c in result.get("changes") or []:
-        print(f"  L{c.get('old_line')}: {c.get('old')!r} -> {c.get('new')!r}  {c.get('evidence_ids')}")
-        print(f"      이유: {c.get('reason')}")
+    # print("\n[변경 내역]")
+    # for c in result.get("changes") or []:
+    #     print(f"  L{c.get('old_line')}: {c.get('old')!r} -> {c.get('new')!r}  {c.get('evidence_ids')}")
+    #     print(f"      이유: {c.get('reason')}")
 
-    # 근거가 부족해 바꾸지 않은 줄
-    print("\n[미해결]")
-    print(json.dumps(result.get("unresolved", []), ensure_ascii=False, indent=2))
+    # # 근거가 부족해 바꾸지 않은 줄
+    # print("\n[미해결]")
+    # print(json.dumps(result.get("unresolved", []), ensure_ascii=False, indent=2))
 
-    # 사용자 안내 사항과 설치가 필요한 패키지 (조건 4)
-    print("\n[안내]", result.get("rewrite_notes"), "/ 설치:", result.get("install_packages"))
+    # # 사용자 안내 사항과 설치가 필요한 패키지 (조건 4)
+    # print("\n[안내]", result.get("rewrite_notes"), "/ 설치:", result.get("install_packages"))
 
-    # 마지막에 검증 결과 출력 추가했음
-    print("검증 통과:", (result.get("verify_result") or {}).get("passed"), "/ 시도:", result.get("attempt"))
-    print(json.dumps(result.get("verify_result", {}).get("errors", []), ensure_ascii=False, indent=2))
-    print(json.dumps(result.get("verify_result", {}).get("warnings", []), ensure_ascii=False, indent=2))
+    # # 마지막에 검증 결과 출력 추가했음
+    # print("검증 통과:", (result.get("verify_result") or {}).get("passed"), "/ 시도:", result.get("attempt"))
+    # print(json.dumps(result.get("verify_result", {}).get("errors", []), ensure_ascii=False, indent=2))
+    # print(json.dumps(result.get("verify_result", {}).get("warnings", []), ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     main()

@@ -6,8 +6,7 @@ from src.graph.nodes.rewriter_node import rewriter_node
 from src.graph.nodes.verifier_node import route_after_verify, verifier_node
 from src.graph.state import MigrationState
 
-
-def migration_pipeline():
+def migration():
     builder = StateGraph(MigrationState)
 
     builder.add_node("analyzer", analyzer_node)

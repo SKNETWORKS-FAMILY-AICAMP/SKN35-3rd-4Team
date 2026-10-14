@@ -3,7 +3,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from src.graph.nodes.retriever_node import get_retriever_engine
 from src.graph.nodes.rewriter_node import _cut_doc_text
-from src.graph.state import RootState
+from src.graph.state import MigrationState
 from src.prompt.search_prompt import search_prompt, search_user_template
 
 load_dotenv()
@@ -27,9 +27,9 @@ def format_context(evidences: list[dict]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
-def search_node(state: RootState):
+def search_node(state: MigrationState):
     question = state["messages"][-1].content.strip()
-
+    print(question)
     evidences = [e.to_dict() for e in get_retriever_engine().retrieve(question, k=SEARCH_K)]
     print(f'search_node evidences : {[e["evidence_id"] for e in evidences]}')
 
@@ -47,15 +47,11 @@ def search_node(state: RootState):
 
     return { 'messages': AIMessage(content=response.content) }
 
+# if __name__ == "__main__":
+#     import sys
+#     from langchain_core.messages import HumanMessage
 
-
-
-
-if __name__ == "__main__":
-    import sys
-    from langchain_core.messages import HumanMessage
-
-    question = " ".join(sys.argv[1:]) or "랭체인이랑 랭그래프 차이가 뭐야?"
-    result = search_node({"messages": [HumanMessage(content=question)], "classification": "langchain"})
-    print("\n===== answer =====")
-    print(result["messages"].content)
+#     question = " ".join(sys.argv[1:]) or "랭체인이랑 랭그래프 차이가 뭐야?"
+#     result = search_node({"messages": [HumanMessage(content=question)], "classification": "langchain"})
+#     print("\n===== answer =====")
+#     print(result["messages"].content)

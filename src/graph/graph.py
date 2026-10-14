@@ -1,18 +1,18 @@
-from src.graph.state import RootState
+from src.graph.state import MigrationState
 from langgraph.graph import StateGraph, START, END
 from src.graph.nodes.classifier_node import classifier_node
 from src.graph.nodes.general_node import general_node
 from src.graph.nodes.search_node import search_node
-from src.graph.supervisor import migration_pipeline
+from src.graph.migration import migration
 
-def prompt_classification(state: RootState):
+def prompt_classification(state: MigrationState):
     return state["classification"]
 
 def supervisor():
-    builder = StateGraph(RootState)
-    
+    builder = StateGraph(MigrationState)
+
     builder.add_node('classifier', classifier_node)
-    builder.add_node('migration', migration_pipeline) 
+    builder.add_node('migration', migration()) 
     builder.add_node('search', search_node)
     builder.add_node('general', general_node)
     
