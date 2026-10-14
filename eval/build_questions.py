@@ -1,4 +1,4 @@
-"""실무형 질문 35개 (eval/questions.json) 를 만든다. 내용을 고칠 때는 이 파일을 고치고 다시 실행한다.
+"""실무형 질문 36개 (eval/questions.json) 를 만든다. 내용을 고칠 때는 이 파일을 고치고 다시 실행한다.
 
     python eval/build_questions.py
 """
@@ -103,6 +103,21 @@ db = FAISS.from_texts(["안녕하세요"], emb)
   ["설치 패키지 안내(langchain-huggingface)"], "0.2.17")
 
 # D. LLMChain → LCEL
+q("LLMChain → LCEL", "중간", "회의록 요약 체인인데 결과에서 ['text']를 꺼내 쓰고 있어요. 1.x에서도 문자열로 받게 해 주세요.", '''
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "너는 사내 회의록 요약 담당이야."),
+    ("human", "다음 회의록을 세 줄로 요약해 줘:\\n{minutes}"),
+])
+chain = LLMChain(llm=ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0), prompt=prompt)
+result = chain.invoke({"minutes": "배포 일정 확정, QA 인원 2명 추가, 다음 회의는 금요일"})
+print(result["text"])
+''', ["from langchain_openai import ChatOpenAI", "from langchain_core.prompts import ChatPromptTemplate",
+      "from langchain_core.output_parsers import StrOutputParser"],
+  ["LLMChain 없음", "result['text'] 대신 문자열 결과(StrOutputParser)", "model_name → model"], "0.1.20")
 q("LLMChain → LCEL", "중간", "predict랑 apply 쓰는 옛날 체인이에요. 여러 입력을 한 번에 돌리는 부분도 살려 주세요.", '''
 from langchain.llms import OpenAI
 from langchain.chains import LLMChain

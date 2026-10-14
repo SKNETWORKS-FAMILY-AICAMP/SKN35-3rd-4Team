@@ -18,14 +18,16 @@
 """
 
 import difflib
+import json
 import re
+from pathlib import Path
 import time
 from datetime import timedelta
 
 import streamlit as st
 
 from src.ui import db
-from src.ui.client import LATEST, TARGET_VERSIONS, mode, run
+from src.ui.client import LATEST, TARGET_VERSIONS, graph_status, mode, run
 from src.ui.optional import load
 from src.ui.mock import import_paths
 from src.ui.versions import ALL_WITH_NEW
@@ -40,7 +42,10 @@ st.set_page_config(page_title="LangChain 마이그레이션 어시스턴트", pa
 APP_NAME = "LangChain 버전 마이그레이션 코드 어시스턴트"
 AUTO = "자동 감지"
 KIND_LABEL = {"native": "최신 위치", "moved": "위치 이동", "same": "그대로", "classic_fallback": "옛 창고(classic)",
-              "unresolved": "못 찾음"}
+              "unresolved": "못 찾음", "deprecated": "옛 메서드", "removed": "없어진 메서드", "exists": "그대로"}
+# 확인용 예제: 평가 질문 중 1.x 로 올리는 30개 (팀 그래프가 지원하는 방향)
+EXAMPLES = [q for q in json.loads((Path(__file__).parent / "eval" / "questions.json").read_text(encoding="utf-8"))
+            if q["target_version"] == "1.x" and q["type"] != "버전 오가기"]
 ORDER = ALL_WITH_NEW
 USER_ID_RULE = re.compile(r"^[0-9A-Za-z가-힣_]{2,20}$")
 
@@ -65,6 +70,14 @@ def open_chat(session_id: str) -> None:
         ss["messages"].append({"role": "assistant", "content": row["answer"] or "", "result": None})
 
 
+def send_example() -> None:
+    """확인용 예제: 그 질문의 버전으로 맞추고 보낸다 (위젯이 그려지기 전에 실행되는 콜백)."""
+    q = next(x for x in EXAMPLES if x["id"] == ss["example_pick"])
+    ss["source_pick"] = q["source_version"] if q["source_version"] in ALL_WITH_NEW else AUTO
+    ss["target_pick"] = q["target_version"]
+    ss["pending"] = f"{q['request']}\n\n```python\n{q['code']}```"
+
+
 def logout() -> None:
     ss["user"] = None
     new_chat()
@@ -85,8 +98,16 @@ def as_markdown(text: str) -> str:
 
 def summary(result: dict) -> str:
     v = result["verification"]
+    note = f"\n\n_{result['note']}_" if result.get("note") else ""
+    if result.get("mode") == "graph":           # 팀 그래프 결과
+        n, left = len(result["changes"]), len(result["unresolved"])
+        head = f"{n}군데를 고쳤어요." if n else "바꿀 부분을 찾지 못했어요."
+        tail = f" 근거가 부족한 {left}줄은 그대로 두었어요." if left else ""
+        check = (f" 검사는 {v['attempts']}회 만에 통과했어요." if v["success"] else
+                 f" 다만 {v['attempts']}회 시도 후에도 검사를 통과하지 못했어요.")
+        return head + tail + check + " 오른쪽에서 바뀐 줄과 근거를 보세요."
     if not v["success"]:
-        return v["message"]
+        return v["message"] + note
     changes = result["changes"]
     if not changes:
         return f"바꿀 import가 없어요. 쓰인 기능이 LangChain {result['target_version']}에도 그대로 있어요."
@@ -104,7 +125,7 @@ def summary(result: dict) -> str:
     back = src in ORDER and ORDER.index(result["target_version"]) < ORDER.index(src)
     head = f"LangChain {result['target_version']}로 되돌리면서 " if back else ""
     return (f"{head}import {len(changes)}줄을 찾아 고쳤어요.{extra} 검증은 {v['attempts']}회 만에 통과했어요. "
-            "오른쪽에서 자세히 보세요.")
+            "오른쪽에서 자세히 보세요." + note)
 
 
 def version_note(result: dict) -> str | None:
@@ -160,6 +181,14 @@ def sidebar() -> None:
     with st.sidebar:
         st.markdown(f"### {APP_NAME}")
         st.button("새 대화", icon=":material/edit_square:", width="stretch", on_click=new_chat)
+        with st.expander(f"확인용 예제 ({len(EXAMPLES)}개)", icon=":material/science:"):
+            st.selectbox("예제 고르기", [q["id"] for q in EXAMPLES], key="example_pick",
+                         format_func=lambda i: next(f"{q['id']} · {q['type']} · {q['difficulty']}" for q in EXAMPLES
+                                                    if q["id"] == i))
+            pick = next(q for q in EXAMPLES if q["id"] == ss.get("example_pick", EXAMPLES[0]["id"]))
+            st.caption(f"{pick['request']} (지금 코드 {pick['source_version']} → 1.x)")
+            st.button("이 예제 보내기", icon=":material/send:", width="stretch", type="primary",
+                      key="send_example", on_click=send_example)
         st.caption("내 대화")
         sessions = db.list_sessions(ss["user"]["user_id"])
         if not sessions:
@@ -175,6 +204,9 @@ def sidebar() -> None:
         badge = {"mock": ("변환: 가짜 결과 · 근거 예시", "gray"),
                  "mock+real_evidence": ("변환: 가짜 결과 · 근거 2번 대응표", "blue")}.get(mode(), ("변환: 팀 챗봇", "green"))
         st.badge(badge[0], icon=":material/lan:", color=badge[1])
+        ok, why = graph_status()
+        if not ok:
+            st.caption(f"팀 그래프 연결 안 됨: {why}")
         st.badge(f"기록: {db.backend_name()}", icon=":material/database:", color="gray")
 
 
@@ -184,8 +216,12 @@ def show_result(result: dict) -> None:
     with st.container(horizontal=True):
         if v["success"]:
             st.badge(f"검증 통과 · {v['attempts']}회", icon=":material/check_circle:", color="green")
+        elif result.get("mode") == "graph":
+            st.badge(f"검증 실패 · {v['attempts']}회", icon=":material/error:", color="red")
         else:
             st.badge("변환 못 함", icon=":material/error:", color="red")
+        if result.get("mode") == "graph":
+            st.badge("팀 그래프", icon=":material/hub:", color="violet")
         st.badge(f"{result['source_version'] or AUTO} → {result['target_version']}", icon=":material/flag:",
                  color="gray")
         if result["changes"]:
@@ -194,7 +230,8 @@ def show_result(result: dict) -> None:
                      color="blue" if real else "gray")
     if not v["success"]:
         st.warning(v["message"])
-        return
+        if result.get("mode") != "graph":
+            return
     before, after = st.tabs(["전후 비교", "변경표 · 근거"])
     with before:
         left, right = st.columns(2)
@@ -207,9 +244,22 @@ def show_result(result: dict) -> None:
         with st.expander("바뀐 줄만 보기"):
             st.code("\n".join(diff), language="diff")
     with after:
-        st.table([{"옛 줄": c["old"], "새 줄": c["new"], "종류": KIND_LABEL.get(c["kind"], c["kind"]),
-                   "대안": c["alternative"] or "", "근거 ID": c["evidence_id"]} for c in result["changes"]])
+        rows = [{"옛 줄": c["old"], "새 줄": c["new"], "종류": KIND_LABEL.get(c["kind"], c["kind"]),
+                 "대안": c["alternative"] or "", "근거 ID": c["evidence_id"]} for c in result["changes"]]
+        if result.get("mode") == "graph":           # 그래프는 바꾼 이유도 준다
+            for row, c in zip(rows, result["changes"]):
+                row["이유"] = c.get("reason", "")
+        if rows:
+            st.table(rows)
         st.caption("옛 창고(classic)는 1.x에서 없어져 langchain_classic에만 남은 기능입니다. 대안이 있으면 최신 방식으로 바꿉니다.")
+        if result.get("unresolved"):
+            st.markdown("**바꾸지 못한 줄** (근거 부족)")
+            st.table([{"줄": u.get("code", ""), "이유": u.get("reason", "")} for u in result["unresolved"]])
+        if result.get("install_packages"):
+            st.markdown("**설치할 패키지**")
+            st.code("pip install " + " ".join(result["install_packages"]), language="bash")
+        for n in result.get("notes") or []:
+            st.caption(f":material/info: {n}")
 
 
 # ---------------------------------------------------------------- 대화 처리
@@ -222,7 +272,7 @@ def handle(text: str, source: str | None, target: str) -> None:
     code = extract_code(text)
     result = None
     if import_paths(code):
-        result = run(code, target, source)
+        result = run(code, target, source, question=text)
         note = version_note(result) if result["verification"]["success"] else None
         reply = (note + "\n\n" if note else "") + summary(result)
     elif followups is not None:            # [선택 기능: followups] 코드 없는 질문에 LLM 이 답함

@@ -17,6 +17,7 @@ DB_FILE = Path(tempfile.gettempdir()) / "migration_bot_check.db"
 DB_FILE.unlink(missing_ok=True)
 os.environ["MIGRATION_DB_URL"] = f"sqlite:///{DB_FILE.as_posix()}"
 os.environ.pop("OPENAI_API_KEY", None)          # LLM 호출 없이 점검
+os.environ["MIGRATION_NO_GRAPH"] = "1"          # 팀 그래프(유료 API) 없이 화면만 점검
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
@@ -115,8 +116,8 @@ def main() -> int:
 
     # 2-1. 버전 오가기 (변환할 버전 선택)
     qs = {q["id"]: q for q in json.loads((ROOT / "eval" / "questions.json").read_text(encoding="utf-8"))}
-    hops = [("1.x", "0.2.17", "q30", "되돌리면서"), (AUTO, "0.3.30", "q31", "그대로 두었어요"),
-            (AUTO, "0.2.17", "q30", "LangChain 1.x** 코드로")]
+    hops = [("1.x", "0.2.17", "q31", "되돌리면서"), (AUTO, "0.3.30", "q32", "그대로 두었어요"),
+            (AUTO, "0.2.17", "q31", "LangChain 1.x** 코드로")]
     for src, tgt, qid, expect in hops:
         at = login(app(), "봇사용자")
         at.selectbox(key="source_pick").set_value(src).run()
@@ -131,7 +132,7 @@ def main() -> int:
     at.selectbox(key="target_pick").set_value("0.2.17").run()
     check("같은 버전 고르면 안내", any("버전이 같아요" in w.value for w in at.warning))
 
-    # 2-2. 질문 35개 전부 화면에서 실행 (오류 없이 답이 나오는가)
+    # 2-2. 질문 36개 전부 화면에서 실행 (오류 없이 답이 나오는가)
     failed = []
     for q in qs.values():
         at = login(app(), "봇사용자")
@@ -147,6 +148,13 @@ def main() -> int:
     at = login(app(), "봇사용자")
     at.chat_input[0].set_value(COMMON).run()
     check("코드 붙여 넣기 → 결과 패널", not at.exception and any("검증" in m.value for m in at.markdown))
+    at = login(app(), "봇사용자")
+    at.selectbox(key="example_pick").set_value("q10").run()
+    at.button(key="send_example").click().run()
+    picked = (at.selectbox(key="source_pick").value, at.selectbox(key="target_pick").value)
+    check("확인용 예제 30개 · 보내기 (예제 버전으로 맞춤)",
+          len(at.selectbox(key="example_pick").options) == 30 and picked == ("0.1.20", "1.x") and bool(last_reply(at)),
+          f"{len(at.selectbox(key='example_pick').options)}개 · {picked[0]} → {picked[1]}")
 
     # 4. 코드 없는 질문 (followups 가 있으면 키 안내, 빼 두었으면 코드를 넣어 달라는 안내)
     at.chat_input[0].set_value("LCEL이 뭐야?").run()
