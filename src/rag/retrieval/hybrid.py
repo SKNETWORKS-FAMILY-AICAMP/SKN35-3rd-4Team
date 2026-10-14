@@ -1,18 +1,5 @@
-"""대응표 정확매칭 + 문서 하이브리드 검색(벡터 + BM25, RRF) + 규칙 기반 재정렬.
-
-    engine = RetrievalEngine()
-    evidences = engine.retrieve("from langchain.chains import LLMChain")
-
-verifier 실패 후 다시 검색할 때는 exclude_ids(실패한 근거)와 attempt(시도 횟수)를 넘긴다.
-attempt 가 늘수록 후보 폭을 넓혀 다음 후보를 준다.
-"""
-
 import argparse
-import hashlib
 import json
-import os
-import shutil
-import tempfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -47,36 +34,17 @@ class Evidence:
         return asdict(self)
 
 
-def open_snapshot_store():
-    """저장소 밖 임시 폴더의 벡터DB 사본을 연다.
-
-    Chroma 는 열기만 해도 chroma.sqlite3 를 조금씩 고쳐 써서, 저장소 안 DB 를 직접 열면
-    검색할 때마다 git 변경이 생긴다. sqlite 해시가 같으면 기존 사본을 재사용한다.
-    """
-    from dotenv import load_dotenv
+def open_store():
     from langchain_chroma import Chroma
     from langchain_openai import OpenAIEmbeddings
 
-    from ..embedding import COLLECTION_NAME, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, ENV_PATH, VECTORDB_DIR
+    from ..embedding import COLLECTION_NAME, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, cloud_client
 
-    sqlite = VECTORDB_DIR / "chroma.sqlite3"
-    if not sqlite.exists():
-        raise FileNotFoundError(f"Vector DB not found: {VECTORDB_DIR}. Run src.rag.embedding.build_vectordb first.")
-    digest = hashlib.sha1(sqlite.read_bytes()).hexdigest()[:12]
-    snapshot = Path(tempfile.gettempdir()) / "skn35_chroma" / digest
-    if not (snapshot / "chroma.sqlite3").exists():
-        staging = snapshot.with_name(f"{digest}.tmp-{os.getpid()}")
-        shutil.copytree(VECTORDB_DIR, staging, dirs_exist_ok=True)
-        try:
-            staging.rename(snapshot)
-        except OSError:  # 다른 프로세스가 먼저 만든 경우
-            shutil.rmtree(staging, ignore_errors=True)
-
-    load_dotenv(ENV_PATH)
+    client = cloud_client()
     return Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=OpenAIEmbeddings(model=EMBEDDING_MODEL, dimensions=EMBEDDING_DIMENSIONS),
-        persist_directory=str(snapshot),
+        client=client,
         create_collection_if_not_exists=False,
     )
 
@@ -116,7 +84,7 @@ class RetrievalEngine:
     @property
     def store(self):
         if self._store is None:
-            self._store = open_snapshot_store()  # OpenAI 키가 필요해서 처음 쓸 때 연다
+            self._store = open_store()  # OpenAI 키가 필요해서 처음 쓸 때 연다
         return self._store
 
     # ------------------------------------------------------------ 후보 검색
@@ -277,10 +245,10 @@ def main():
             print(f"[{e.match}] {e.evidence_id}  {e.old} {e.signals[0]} → {e.new} ({e.kind})")
         elif e.source == "import_map":
             print(f"[{e.match}] {e.evidence_id}  {e.old} → {e.new} ({e.kind}, {e.import_status})"
-                  + (f"  대안: {e.alternative}" if e.alternative else "") + (f"  {e.signals}" if e.signals else ""))
+                    + (f"  대안: {e.alternative}" if e.alternative else "") + (f"  {e.signals}" if e.signals else ""))
         else:
             print(f"[{e.match} {e.score:.4f}] {e.evidence_id}  ({e.source}, {e.era}) {e.title} > {e.section}"
-                  + (f"  {e.signals}" if e.signals else ""))
+                    + (f"  {e.signals}" if e.signals else ""))
 
 
 if __name__ == "__main__":
