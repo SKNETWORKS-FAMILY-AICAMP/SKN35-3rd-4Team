@@ -1,32 +1,35 @@
-from langgraph.graph import END, START, StateGraph
-
-from src.graph.nodes.analyzer_node import analyzer_node
-from src.graph.nodes.retriever_node import retriever_node
-from src.graph.nodes.rewriter_node import rewriter_node
-from src.graph.nodes.verifier_node import route_after_verify, verifier_node
 from src.graph.state import MigrationState
+from langgraph.graph import StateGraph, START, END
+from src.graph.nodes.classifier_node import classifier_node
+from src.graph.nodes.general_node import general_node
+from src.graph.nodes.search_node import search_node
+from src.graph.migration import migration
 
+def prompt_classification(state: MigrationState):
+    return state["classification"]
 
-def migration_pipeline():
+def supervisor():
     builder = StateGraph(MigrationState)
 
-    builder.add_node("analyzer", analyzer_node)
-    builder.add_node("retriever", retriever_node)
-    builder.add_node("rewriter", rewriter_node)
-    builder.add_node("verifier", verifier_node)
-
-    builder.add_edge(START, "analyzer")
-    builder.add_edge("analyzer", "retriever")
-    builder.add_edge("retriever", "rewriter")
-    builder.add_edge("rewriter", "verifier")
-
-    # 검증 결과에 따른 분기: 실패면 retriever로 되돌아가 근거를 다시 찾기 
+    builder.add_node('classifier', classifier_node)
+    builder.add_node('migration', migration()) 
+    builder.add_node('search', search_node)
+    builder.add_node('general', general_node)
+    
+    builder.add_edge(START, 'classifier')
     builder.add_conditional_edges(
-        "verifier",
-        route_after_verify,
-        {"retry": "retriever", "done": END},
+        'classifier',
+        prompt_classification,
+        {
+            'migration': 'migration',
+            'search': 'search',
+            'general': 'general'
+        }
     )
+    builder.add_edge('migration', END)
+    builder.add_edge('search', END)
+    builder.add_edge('general', END)
 
     app = builder.compile()
-    
+
     return app

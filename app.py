@@ -1,7 +1,6 @@
 import json
 from langchain_core.messages import HumanMessage
-# from src.graph.supervisor import migration_pipeline
-from src.graph.graph import supervisor
+from src.graph.supervisor import supervisor
 
 def main():
     question = """야 내가 지금 온라인 쇼핑몰 고객센터(CS)팀에서 업무 자동화를 맡고 있거든
@@ -66,10 +65,15 @@ if __name__ == "__main__":
     count = process_csv("inquiries.csv", "drafts.csv")
     print(f"{count}건 답변 초안 생성 완료")
 ```"""
-
+    # question = "안녕하세요."
+    # question = "langchain 버전 0.3과 1.0의 차이가 뭐야?"
+    
     # supervisor = migration_pipeline()
     # result = supervisor.invoke({ "question": question })
-    result = supervisor.invoke({ "messages": [HumanMessage(content=question)] })
+
+    graph = supervisor()
+    result = graph.invoke({ "messages": [HumanMessage(content=question)] })
+    print(result)
 
     print("\n[응답]")
     print(result.get("new_code") or result.get("old_code"))
