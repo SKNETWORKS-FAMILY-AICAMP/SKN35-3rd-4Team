@@ -10,8 +10,21 @@
                                                                                (경고: install_required, import_unverified, import_not_in_evidence)
     6. 구버전 메서드 대응표의 메서드 호출이 남았는가 (이름만으로 찾으므로 경고만)    legacy_method_remaining
     7. 안 쓰는 import 원래 쓰던 이름의 import가 변환 후 안 쓰이는가               unused_import  (원래부터 안 쓰던 것은 경고)
-    8. 반환값 보존   문자열을 돌려주던 호출(.run/.predict)을 LCEL로 바꾸면서      return_type_changed
-                     출력 파서도 .content도 없이 끝냈는가
+    8. 반환값 보존   문자열을 돌려주던 호출(.run/.predict)을 바꾸면서 문자열을 잃었는가  return_type_changed
+                     (a) LCEL로 바꾸면서 출력 파서도 .content도 없이 끝냄
+                     (b) 같은 객체의 .invoke로만 바꾸고 결과를 꺼내지 않음
+                         체인(…Chain).invoke → dict라 [출력 키] 필요 / 채팅 모델.invoke → AIMessage라 .content 필요
+                         예: conversation.run("안녕") → conversation.invoke({"input": "안녕"})  (["response"] 빠짐)
+    9. 정의 안 된 이름 import도 정의도 안 한 이름을 쓰는가 (실행하면 NameError)    undefined_name
+                     예: prompt | llm | StrOutputParser() 를 쓰고 StrOutputParser import를 빠뜨림
+                     (원래 코드에서도 정의 안 된 이름이면 다른 파일에 있을 수 있으므로 경고만)
+   10. 출력 꺼내기   LCEL 체인 invoke 결과를 ['text']처럼 꺼내는데, 체인 끝이         invoke_output_subscript
+                     StrOutputParser(결과=문자열)나 LLM(결과=AIMessage)인가 (실행하면 TypeError)
+                     예: chain = prompt | llm | StrOutputParser()  →  chain.invoke(...)["text"]
+                     (LLMChain.invoke는 dict를 돌려줘 ['text']가 맞으므로 | 로 만든 체인만 본다)
+   11. 체인 입출력 키 레거시 체인 invoke의 입력 키·출력 키가 그 클래스의 실제 키와 같은가     chain_io_key
+                     예: RetrievalQA는 입력 "query", 출력 "result"인데 {"input": ...}["output"]으로 씀
+                     (키가 틀리면 실행 시 ValueError: Missing some input keys / KeyError)
 
 import 존재 확인 순서 (5번)
     a. 그 경로를 준 import_map 근거가 있으면 대응표 빌드 때 실제로 import 해 본 결과(import_status)를 쓴다
@@ -28,12 +41,13 @@ state.py
     evidences, shown_evidence_ids, changes, unresolved, old_code, new_code, rewrite_failed를 읽고
     verify_result, attempt, exclude_ids(merge_ids reducer: 합집합 누적)를 쓴다
 
-단독 실행 (프로젝트 루트에서, OpenAI 키 불필요):
-    uv run python -m src.graph.nodes.verifier_node
-    VERIFIER_SANDBOX=1 uv run python -m src.graph.nodes.verifier_node     # 실제 import 검사
+단독 실행 (프로젝트 루트에서, 가상환경을 켠 상태로. OpenAI 키 불필요):
+    python -m src.graph.nodes.verifier_node
+    실제 import 검사(PowerShell): $env:VERIFIER_SANDBOX="1"; python -m src.graph.nodes.verifier_node
 """
 
 import ast
+import builtins
 import difflib
 import json
 import os
@@ -46,20 +60,36 @@ from src.graph.state import MigrationState
 from src.rag.import_map import PYTHON_VERSION, TARGET_VERSIONS, symbols_path
 from src.rag.retrieval.import_lookup import lookup, lookup_methods, parse_import_paths
 
-MAX_ATTEMPTS = int(os.getenv("VERIFIER_MAX_ATTEMPTS", "3"))# rewriter 최대 시도 횟수
+MAX_ATTEMPTS = int(os.getenv("VERIFIER_MAX_ATTEMPTS", "3"))  # rewriter 최대 시도 횟수
 USE_SANDBOX = os.getenv("VERIFIER_SANDBOX", "0") == "1"
 SANDBOX_TIMEOUT = 300
 
-TARGET_TOPS = {p.replace("-", "_") for p in TARGET_VERSIONS} # 1.x 버전을 아는 최상위 패키지
-EVIDENCE_FAULT_TYPES = {"import_failed"} # 근거 자체가 틀린 오류 -> exclude_ids
+TARGET_TOPS = {p.replace("-", "_") for p in TARGET_VERSIONS}  # 1.x 버전을 아는 최상위 패키지
+EVIDENCE_FAULT_TYPES = {"import_failed"}  # 근거 자체가 틀린 오류 -> exclude_ids
+LANGCHAIN_TOPS = ("langchain", "langgraph")  # 검사 대상 패키지 접두어
 
 
-# 결과 항목
+# 공통
 
 def issue(type_: str, message: str, *, old_line=None, new_line=None, evidence_id=None, path=None) -> dict:
     """errors / warnings 공통 형식. message는 rewriter 재시도 프롬프트에 그대로 들어가므로 한국어로."""
     return {"type": type_, "message": message, "old_line": old_line, "new_line": new_line,
             "evidence_id": evidence_id, "path": path}
+
+
+def _parse(code: str) -> ast.AST | None:
+    """파싱 실패면 None. 원본 코드는 verify()에서 한 번만 파싱해 여러 검사가 같이 쓴다."""
+    try:
+        return ast.parse(code)
+    except SyntaxError:
+        return None
+
+
+def _names(tree: ast.AST | None) -> set[str]:
+    """코드에서 참조된 이름 전체(ast.Name). tree가 None이면 빈 집합."""
+    if tree is None:
+        return set()
+    return {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
 
 
 # 1. 문법
@@ -69,6 +99,7 @@ def check_syntax(new_code: str) -> tuple[ast.AST | None, list[dict]]:
         return ast.parse(new_code), []
     except SyntaxError as e:
         return None, [issue("syntax_error", f"문법 오류: {e.msg}", new_line=e.lineno)]
+
 
 # 2. 근거 ID
 
@@ -86,17 +117,12 @@ def _is_unused_import_removal(change: dict, used_names: set[str] | None) -> bool
     return not (names & used_names)  # 지운 이름을 새 코드가 아직 쓰면 면제 안 함 (NameError 방지)
 
 
-def check_evidence_ids(changes: list[dict], shown_ids: list[str] | None, evidences: list[dict],
-                       new_code: str | None = None) -> list[dict]:
-    """근거 ID를 '이번 프롬프트에 실제로 보여준 근거' 기준으로 검사한다.
+def check_evidence_ids(changes: list[dict], shown: set[str], all_ids: set[str],
+                       used_names: set[str] | None) -> list[dict]:
+    """근거 ID를 '이번 프롬프트에 실제로 보여준 근거(shown)' 기준으로 검사한다.
     evidences 전체로 검사하면, 피드백에 보였던 이전 ID를 LLM이 복사해도(내용은 못 봤는데) 통과된다.
-    예외: 안 쓰게 된 import 줄의 삭제는 근거 ID가 없어도 된다 (unused_import 오류가 시킨 일이므로)."""
-    all_ids = {e["evidence_id"] for e in evidences}
-    shown = set(shown_ids) if shown_ids is not None else all_ids   # 구버전 rewriter 호환
-    try:
-        used_names = {n.id for n in ast.walk(ast.parse(new_code)) if isinstance(n, ast.Name)} if new_code is not None else None
-    except SyntaxError:
-        used_names = None  # 문법 오류면 예외 없이 엄격하게 검사함
+    예외: 안 쓰게 된 import 줄의 삭제는 근거 ID가 없어도 된다 (unused_import 오류가 시킨 일이므로).
+    used_names가 None이면(새 코드 문법 오류) 예외 없이 엄격하게 검사한다."""
     errors = []
     for c in changes:
         ids = c.get("evidence_ids") or []
@@ -167,7 +193,7 @@ def check_changes(old_code: str, new_code: str, changes: list[dict]) -> list[dic
     return errors
 
 
-# import 수집
+# import 수집 (4·5번 공통)
 
 def collect_imports(tree: ast.AST) -> list[tuple[str, int, bool]]:
     """(경로, 줄 번호, 모듈인지) 목록. langchain / langgraph 계열만."""
@@ -177,7 +203,21 @@ def collect_imports(tree: ast.AST) -> list[tuple[str, int, bool]]:
             out += [(a.name, node.lineno, True) for a in node.names]
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
             out += [(f"{node.module}.{a.name}", node.lineno, False) for a in node.names if a.name != "*"]
-    return [x for x in out if x[0].startswith(("langchain", "langgraph"))]
+    return [x for x in out if x[0].startswith(LANGCHAIN_TOPS)]
+
+
+def evidence_import_paths(evidences: list[dict], shown: set[str]) -> list[tuple[str, str]]:
+    """이번 프롬프트에 보여준 근거가 언급한 import 경로 → [(경로, 근거 ID)].
+    대응표 근거는 1.x 경로(new), 문서 근거는 본문 코드 예시의 import 문.
+    5번(근거 있는 import인가)과 9번(빠진 import를 어디서 가져올지 알려 주기)이 같이 쓴다."""
+    out = []
+    for e in evidences:
+        if e["evidence_id"] not in shown:
+            continue
+        if e.get("source") == "import_map" and e.get("new"):
+            out.append((e["new"], e["evidence_id"]))
+        out += [(p, e["evidence_id"]) for p in parse_import_paths(e.get("text") or "")]
+    return out
 
 
 # 4. 구버전 import 잔존
@@ -274,29 +314,15 @@ def loose_key(path: str) -> tuple[str, str]:
     return path.split(".")[0], path.rsplit(".", 1)[-1]
 
 
-def grounded_keys(evidences: list[dict], shown: set[str]) -> set[tuple[str, str]]:
-    """이번 프롬프트에 보여준 근거가 실제로 언급한 import 경로.
-    대응표 근거는 1.x 경로(new), 문서 근거는 본문 코드 예시의 import 문."""
-    keys = set()
-    for e in evidences:
-        if e["evidence_id"] not in shown:
-            continue
-        if e.get("source") == "import_map" and e.get("new"):
-            keys.add(loose_key(e["new"]))
-        keys.update(loose_key(p) for p in parse_import_paths(e.get("text") or ""))
-    return keys
-
-
 def check_import_exists(imports, handled: set[str], evidences: list[dict], shown: set[str],
-                        grounded: set | None = None, old_paths: set | None = None) -> tuple[list[dict], list[dict]]:
-    """grounded: 근거가 언급한 경로, old_paths: 원본 코드에 이미 있던 경로.
+                        grounded: set, old_paths: set) -> tuple[list[dict], list[dict]]:
+    """grounded: 근거가 언급한 경로(loose_key), old_paths: 원본 코드에 이미 있던 경로.
     - 1.x에 없음                      → 오류 (import_failed)
     - 존재 확인 불가 + 근거도 없음      → 오류 (ungrounded_import: 지어낸 패키지/경로일 수 있음)
     - 존재 확인 불가 + 근거 있음        → 경고 (import_unverified)
     - 존재하지만 근거에 없음            → 경고 (import_not_in_evidence)"""
     errors, warnings = [], []
     pending = []   # 근거로 판정 못 한 경로는 정적/샌드박스 검사
-    grounded, old_paths = grounded or set(), old_paths or set()
 
     for path, lineno, is_mod in imports:
         if path in handled:
@@ -373,21 +399,16 @@ def check_legacy_methods(new_code: str) -> list[dict]:
 
 # 7. 안 쓰는 import
 
-def check_unused_imports(tree: ast.AST, old_code: str) -> tuple[list[dict], list[dict]]:
-    """import했지만 코드에서 쓰이지 않는 langchain / langgraph 이름을 찾는다.
+def check_unused_imports(tree: ast.AST, used: set[str], old_used: set[str]) -> tuple[list[dict], list[dict]]:
+    """import했지만 코드에서 쓰이지 않는 langchain / langgraph 이름을 찾는다. used/old_used: 새/원래 코드에서 참조된 이름.
     - 원래 코드에서 쓰던 이름 → 오류 (변환하고 남은 import. 예: LLMChain을 LCEL로 바꾸고
       from langchain_classic.chains import LLMChain이 남음 → 불필요한 langchain-classic 설치까지 요구하게 됨)
-    - 원래 코드에서도 안 쓰던 이름 → 경고 (사용자 코드 그대로이므로 재시도 사유가 아님)"""
-    used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}  # 새 코드에서 실제로 참조된 이름
-    try:
-        old_used = {n.id for n in ast.walk(ast.parse(old_code)) if isinstance(n, ast.Name)}  # 원래 코드에서 쓰던 이름
-    except SyntaxError:
-        old_used = set()
-
+    - 원래 코드에서도 안 쓰던 이름 → 경고 (사용자 코드 그대로이므로 재시도 사유가 아님)
+    rewriter의 drop_leftover_imports()가 같은 기준으로 먼저 정리하므로, 여기 걸리면 그 후처리를 빠져나간 경우다."""
     errors, warnings = [], []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.ImportFrom) and node.module and node.level == 0
-                and node.module.startswith(("langchain", "langgraph"))):
+                and node.module.startswith(LANGCHAIN_TOPS)):
             continue  # from langchain... import 형태만 검사함
         for a in node.names:
             name = a.asname or a.name  # as 별칭이 있으면 별칭으로 쓰임
@@ -405,26 +426,319 @@ def check_unused_imports(tree: ast.AST, old_code: str) -> tuple[list[dict], list
 STR_RETURN_NOTE = re.compile(r"returned (only )?(a|the output) string", re.IGNORECASE)
 
 
-def check_return_type(old_code: str, tree: ast.AST) -> list[dict]:
-    """chain.run(...) / llm.predict(...)는 문자열을 돌려줬다. 이걸 LCEL(prompt | llm)로 바꾸고
-    StrOutputParser()도 .content도 없으면 invoke 결과가 AIMessage가 되어 동작이 바뀐다 (프롬프트 규칙 3 위반).
-    method_map Note에 'returned ... string'이 적힌 호출만 대상으로 한다."""
+# 레거시 체인(langchain_classic)의 invoke 입력 키·출력 키 (각 클래스의 기본값).
+# 체인.invoke는 {입력 키: 값} dict를 받고, 입력+출력이 함께 담긴 dict를 돌려준다.
+# inputs가 None이면 입력 키가 프롬프트 변수에 따라 달라지므로 검사하지 않는다(LLMChain).
+# extra: 출력 키 외에 결과 dict에 들어올 수 있는 키 (memory 기록, 출처 문서 등)
+CHAIN_IO_KEYS = {
+    "LLMChain":                     {"inputs": None,                         "output": "text",     "extra": set()},
+    "ConversationChain":            {"inputs": {"input"},                    "output": "response", "extra": {"history"}},
+    "RetrievalQA":                  {"inputs": {"query"},                    "output": "result",   "extra": {"source_documents"}},
+    "ConversationalRetrievalChain": {"inputs": {"question", "chat_history"}, "output": "answer",   "extra": {"source_documents", "generated_question"}},
+    "RetrievalQAWithSourcesChain":  {"inputs": {"question"},                 "output": "answer",   "extra": {"sources", "source_documents"}},
+}
+
+
+def _constructed_class(call: ast.Call) -> str:
+    """객체를 만든 클래스 이름. ConversationChain(...) → 'ConversationChain',
+    RetrievalQA.from_chain_type(...) / ConversationalRetrievalChain.from_llm(...) → 앞의 클래스 이름."""
+    f = call.func
+    if isinstance(f, ast.Attribute) and f.attr.startswith("from_"):
+        return _callee_name(f.value)
+    return _callee_name(call)
+
+
+def _receivers(tree: ast.AST, methods: set[str]) -> dict[str, str]:
+    """x.run(...) / x.predict(...)처럼 methods를 호출한 변수 → 호출한 메서드 이름."""
+    out = {}
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in methods
+                and isinstance(n.func.value, ast.Name)):
+            out.setdefault(n.func.value.id, n.func.attr)
+    return out
+
+
+def _object_kind(tree: ast.AST, name: str) -> tuple[str, str] | None:
+    """변수가 가리키는 객체의 invoke 결과 형태. ('dict', 클래스명) 체인 / ('message', 클래스명) 채팅 모델 / None 모름.
+    | 로 만든 LCEL 체인은 여기서 보지 않는다(위의 (a)와 10번 검사가 맡음)."""
+    value = _assigned_value(tree, name)
+    if not isinstance(value, ast.Call):
+        return None
+    cls = _constructed_class(value)
+    if cls.endswith("Chain") or cls in CHAIN_IO_KEYS:
+        return "dict", cls
+    if cls.startswith("Chat"):
+        return "message", cls
+    return None
+
+
+def _result_extracted(call: ast.AST, parent: dict, tree: ast.AST, kind: str) -> bool:
+    """invoke 결과에서 문자열을 꺼내는가(dict면 [키], message면 .content). 결과를 버리는 문장이면 검사할 필요가 없으므로 True."""
+    node, p = call, parent.get(call)
+    if isinstance(p, ast.Await):
+        node, p = p, parent.get(p)
+    if isinstance(p, ast.Expr):
+        return True  # x.invoke(...) 단독 문장: 결과를 쓰지 않음
+    if kind == "dict" and isinstance(p, ast.Subscript) and p.value is node:
+        return True
+    if kind == "message" and isinstance(p, ast.Attribute) and p.attr == "content":
+        return True
+    if isinstance(p, ast.Assign) and len(p.targets) == 1 and isinstance(p.targets[0], ast.Name):
+        var = p.targets[0].id  # result = x.invoke(...) 다음에 result[...] / result.content 로 꺼내는지
+        for n in ast.walk(tree):
+            if kind == "dict" and isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name) and n.value.id == var:
+                return True
+            if (kind == "message" and isinstance(n, ast.Attribute) and n.attr == "content"
+                    and isinstance(n.value, ast.Name) and n.value.id == var):
+                return True
+    return False
+
+
+def check_return_type(old_code: str, old_tree: ast.AST | None, tree: ast.AST) -> list[dict]:
+    """chain.run(...) / llm.predict(...)는 문자열을 돌려줬다. 바꾼 뒤에도 문자열이어야 한다 (프롬프트 규칙 3).
+    method_map Note에 'returned ... string'이 적힌 호출만 대상으로 한다.
+    (a) LCEL(prompt | llm)로 바꾸고 StrOutputParser()도 .content도 없으면 결과가 AIMessage가 된다.
+    (b) 같은 객체를 그대로 쓰면서 .run → .invoke로만 바꾸면 결과가 dict(체인)나 AIMessage(채팅 모델)가 된다.
+        LLM이 실제로 conversation.run(...)을 conversation.invoke({...})로만 바꾸고 ["response"]를 빠뜨렸다."""
     str_calls = [r for r in lookup_methods(old_code) if STR_RETURN_NOTE.search(r.get("note") or "")]
     if not str_calls:
         return []  # 원래 코드에 문자열 반환 호출이 없으면 검사 안 함
+    rec = str_calls[0]
+    errors = []
+
+    # (a) LCEL 체인 + 파서 없음
     has_pipe = any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.BitOr) for n in ast.walk(tree))
     has_parser = any(isinstance(n, ast.Name) and n.id.endswith("Parser") for n in ast.walk(tree))
     has_content = any(isinstance(n, ast.Attribute) and n.attr == "content" for n in ast.walk(tree))
-    if not has_pipe or has_parser or has_content:
-        return []  # LCEL이 아니거나, 파서/.content로 문자열을 꺼내면 정상
-    rec = str_calls[0]
-    return [issue("return_type_changed",
-                  f"원래 {_call_label(rec)}은 문자열을 반환했는데, 바꾼 LCEL 체인은 출력 파서가 없어 AIMessage를 반환합니다. "
-                  f"근거 Note대로 체인 끝에 StrOutputParser()를 붙이고 그 import도 changes에 기록하세요.",
-                  evidence_id=rec["id"])]
+    if has_pipe and not has_parser and not has_content:
+        errors.append(issue("return_type_changed",
+                            f"원래 {_call_label(rec)}은 문자열을 반환했는데, 바꾼 LCEL 체인은 출력 파서가 없어 AIMessage를 반환합니다. "
+                            f"근거 Note대로 체인 끝에 StrOutputParser()를 붙이고 그 import도 changes에 기록하세요.",
+                            evidence_id=rec["id"]))
+
+    # (b) 같은 변수의 .run/.predict → .invoke 인데 결과를 꺼내지 않음
+    if old_tree is None:
+        return errors
+    old_calls = _receivers(old_tree, {r["method"] for r in str_calls})  # 변수 → 원래 메서드
+    parent = {c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
+    reported = set()
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr in ("invoke", "ainvoke") and isinstance(n.func.value, ast.Name)):
+            continue
+        var = n.func.value.id
+        if var not in old_calls or var in reported:
+            continue
+        kind = _object_kind(tree, var)
+        if kind is None or _result_extracted(n, parent, tree, kind[0]):
+            continue
+        reported.add(var)
+        before = f"원래 {var}.{old_calls[var]}(...)은 문자열을 반환했는데"
+        if kind[0] == "dict":
+            key = (CHAIN_IO_KEYS.get(kind[1]) or {}).get("output")
+            how = f'{var}.invoke(...)["{key}"]' if key else f"{var}.invoke(...)[출력 키]"
+            msg = (f"{before}, {kind[1]}.invoke는 입력과 출력이 함께 담긴 dict를 반환합니다(출력이 달라짐). "
+                   f"원래처럼 문자열을 쓰려면 {how}로 꺼내세요.")
+        else:
+            msg = (f"{before}, 채팅 모델 {kind[1]}.invoke는 AIMessage를 반환합니다(출력이 달라짐). "
+                   f"{var}.invoke(...).content로 문자열을 꺼내세요.")
+        errors.append(issue("return_type_changed", msg, new_line=n.lineno, evidence_id=rec["id"]))
+    return errors
 
 
-# verify 함수 
+# 9. 정의되지 않은 이름
+
+BUILTIN_NAMES = set(dir(builtins)) | {"__file__", "__name__", "__doc__", "__spec__", "__package__",
+                                      "__loader__", "__builtins__", "__path__", "__annotations__"}
+_MATCH_NODES = tuple(getattr(ast, k) for k in ("MatchAs", "MatchStar") if hasattr(ast, k))
+
+
+def undefined_names(tree: ast.AST) -> dict[str, int]:
+    """읽기만 하고 파일 어디에서도 정의하지 않은 이름 → 처음 나온 줄 번호.
+    '정의'는 할당·for·with·import·def·class·함수 인자·except as 등 이름이 생기는 모든 곳.
+    스코프를 따지지 않고 파일 전체에서 한 번이라도 정의되면 정의된 것으로 본다(오탐을 줄이려고 느슨하게).
+    from x import * 가 있으면 어떤 이름이 들어왔는지 알 수 없어 검사하지 않는다."""
+    bound = set(BUILTIN_NAMES)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+            bound.add(n.id)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(n.name)
+        elif isinstance(n, ast.arg):
+            bound.add(n.arg)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for a in n.names:
+                if a.name == "*":
+                    return {}
+                bound.add((a.asname or a.name).split(".")[0])
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            bound.add(n.name)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            bound.update(n.names)
+        elif _MATCH_NODES and isinstance(n, _MATCH_NODES) and getattr(n, "name", None):
+            bound.add(n.name)
+        elif getattr(n, "rest", None) and type(n).__name__ == "MatchMapping":
+            bound.add(n.rest)
+    out: dict[str, int] = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id not in bound:
+            out[n.id] = min(out.get(n.id, n.lineno), n.lineno)
+    return out
+
+
+def check_undefined_names(tree: ast.AST, old_tree: ast.AST | None,
+                          ev_paths: list[tuple[str, str]]) -> tuple[list[dict], list[dict]]:
+    """새 코드에서 정의 안 된 이름을 찾는다. ev_paths: evidence_import_paths() 결과.
+    - 원래 코드에서는 정의돼 있었거나 쓰지 않던 이름 → 오류 (변환하면서 import를 빠뜨림 → 실행하면 NameError)
+      근거에 그 이름의 import 경로가 있으면 '어떤 줄을 넣으면 되는지'까지 피드백에 적는다.
+    - 원래 코드에서도 정의 안 된 이름 → 경고 (코드 조각이라 다른 곳에서 정의됐을 수 있음, 재시도 사유 아님)"""
+    old_undefined = set(undefined_names(old_tree)) if old_tree is not None else set()
+    hints: dict[str, tuple[str, str]] = {}  # 이름 → (import 문, 근거 ID)
+    for path, eid in ev_paths:
+        module, _, name = path.rpartition(".")
+        if module and module.startswith(LANGCHAIN_TOPS):
+            hints.setdefault(name, (f"from {module} import {name}", eid))
+
+    errors, warnings = [], []
+    for name, line in sorted(undefined_names(tree).items(), key=lambda x: x[1]):
+        if name in old_undefined:
+            warnings.append(issue("undefined_name",
+                                  f"{name}이(가) 정의되지 않았습니다. 원래 코드에서도 정의되지 않은 이름이라 그대로 두었습니다.",
+                                  new_line=line))
+            continue
+        hint = hints.get(name)
+        msg = f"{name}을(를) 쓰지만 import하거나 정의하지 않았습니다(실행하면 NameError). "
+        if hint:
+            msg += f"근거 [{hint[1]}]에 나온 `{hint[0]}` 줄을 추가하고, 그 추가를 changes에 기록하세요(evidence_ids에 {hint[1]})."
+        else:
+            msg += "EVIDENCE에 나온 import 경로로 추가하고 changes에 기록하세요. EVIDENCE에 경로가 없으면 이 변경을 되돌리고 unresolved에 적으세요."
+        errors.append(issue("undefined_name", msg, new_line=line, evidence_id=hint[1] if hint else None))
+    return errors, warnings
+
+
+# 10. LCEL 체인 출력 꺼내기
+
+def _callee_name(node: ast.AST) -> str:
+    """ChatOpenAI(...) → 'ChatOpenAI', parsers.StrOutputParser() → 'StrOutputParser'."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _assigned_value(tree: ast.AST, name: str) -> ast.AST | None:
+    """name = ... 중 가장 마지막 할당의 오른쪽 식."""
+    found = None
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+                and n.targets[0].id == name and (found is None or n.lineno > found.lineno)):
+            found = n
+    return found.value if found else None
+
+
+def _pipeline_output(expr: ast.AST, tree: ast.AST) -> str | None:
+    """| 로 만든 LCEL 체인의 출력 종류. 'str'(StrOutputParser로 끝남) / 'message'(채팅 모델로 끝남) / None(판단 안 함)."""
+    if isinstance(expr, ast.Name):
+        expr = _assigned_value(tree, expr.id)
+    if not (isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr)):
+        return None  # | 체인이 아니면(LLMChain 등) 출력 형태를 모르므로 검사하지 않음
+    last = expr.right
+    if isinstance(last, ast.Call) and _callee_name(last).endswith("StrOutputParser"):
+        return "str"
+    if isinstance(last, ast.Name):
+        model = _assigned_value(tree, last.id)
+        if isinstance(model, ast.Call) and _callee_name(model).startswith("Chat"):
+            return "message"
+    return None
+
+
+def check_invoke_subscript(tree: ast.AST) -> list[dict]:
+    """chain.invoke(...)["text"] 같은 코드를 찾는다.
+    구버전 LLMChain.invoke/__call__은 {"text": ...} dict를 돌려줘서 ['text']로 꺼냈지만,
+    LCEL 체인은 StrOutputParser로 끝나면 문자열, 모델로 끝나면 AIMessage를 돌려준다 → 둘 다 ['text']를 쓰면 TypeError.
+    LLM이 구버전 습관을 남기는 경우가 실제로 있어서(검증 통과 후 실행 실패) 추가한 검사."""
+    errors = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Subscript):
+            continue
+        call = n.value.value if isinstance(n.value, ast.Await) else n.value
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr in ("invoke", "ainvoke")):
+            continue
+        kind = _pipeline_output(call.func.value, tree)
+        if kind is None:
+            continue
+        key = ast.unparse(n.slice)
+        if kind == "str":
+            msg = (f"체인이 StrOutputParser()로 끝나서 invoke 결과가 이미 문자열인데 [{key}]로 꺼내고 있습니다(실행하면 TypeError). "
+                   f"구버전 LLMChain 결과(dict)를 꺼내던 방식이 남은 것이니 [{key}]를 지우고 결과를 그대로 쓰세요.")
+        else:
+            msg = (f"체인이 채팅 모델로 끝나서 invoke 결과가 AIMessage인데 [{key}]로 꺼내고 있습니다(실행하면 TypeError). "
+                   f"[{key}] 대신 체인 끝에 StrOutputParser()를 붙이세요.")
+        errors.append(issue("invoke_output_subscript", msg, new_line=n.lineno))
+    return errors
+
+
+# 11. 레거시 체인 입출력 키
+
+def _subscript_keys(call: ast.AST, parent: dict, tree: ast.AST) -> list[tuple[str, int]]:
+    """invoke 결과에서 꺼낸 문자열 키와 줄 번호. x.invoke(...)["k"] 와 r = x.invoke(...) → r["k"] 둘 다."""
+    node, p = call, parent.get(call)
+    if isinstance(p, ast.Await):
+        node, p = p, parent.get(p)
+    found = []
+    if isinstance(p, ast.Subscript) and p.value is node:
+        found.append(p)
+    elif isinstance(p, ast.Assign) and len(p.targets) == 1 and isinstance(p.targets[0], ast.Name):
+        var = p.targets[0].id
+        found += [n for n in ast.walk(tree)
+                  if isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name) and n.value.id == var]
+    return [(s.slice.value, s.lineno) for s in found
+            if isinstance(s.slice, ast.Constant) and isinstance(s.slice.value, str)]
+
+
+def check_chain_io_keys(tree: ast.AST) -> list[dict]:
+    """레거시 체인 invoke의 입력 키·출력 키가 그 클래스의 실제 키와 맞는지 본다 (CHAIN_IO_KEYS).
+    LLM이 RetrievalQA에 {"input": ...}을 넣고 ["output"]으로 꺼낸 일이 실제로 있었다(정답: "query" / "result").
+    키 이름은 근거 문서에 잘 안 나와서 LLM이 추측하기 쉽고, 틀리면 실행하자마자 에러가 난다."""
+    errors = []
+    parent = {c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr in ("invoke", "ainvoke") and isinstance(n.func.value, ast.Name)):
+            continue
+        var = n.func.value.id
+        value = _assigned_value(tree, var)
+        info = CHAIN_IO_KEYS.get(_constructed_class(value)) if isinstance(value, ast.Call) else None
+        if info is None or info["inputs"] is None:
+            continue
+        cls = _constructed_class(value)
+        inputs = sorted(info["inputs"])
+        example = f'{var}.invoke({{"{inputs[0]}": ...}})["{info["output"]}"]'
+
+        # 입력 키: invoke({...})에 dict를 직접 쓴 경우만 검사
+        if n.args and isinstance(n.args[0], ast.Dict):
+            keys = {k.value for k in n.args[0].keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            wrong = sorted(keys - info["inputs"])
+            if wrong:
+                errors.append(issue("chain_io_key",
+                                    f"{cls}의 입력 키는 {inputs}인데 {wrong}을(를) 넣었습니다(실행하면 ValueError: Missing some input keys). "
+                                    f"{example}처럼 쓰세요.", new_line=n.lineno))
+
+        # 출력 키: 결과 dict에서 꺼낸 키
+        allowed = info["inputs"] | {info["output"]} | info["extra"]
+        for key, line in _subscript_keys(n, parent, tree):
+            if key not in allowed:
+                errors.append(issue("chain_io_key",
+                                    f'{cls}의 출력 키는 "{info["output"]}"인데 ["{key}"]로 꺼내고 있습니다(실행하면 KeyError). '
+                                    f"{example}처럼 쓰세요.", new_line=line))
+    return errors
+
+
+# verify 함수
 
 def verify(
     old_code: str,
@@ -437,33 +751,42 @@ def verify(
     exclude_ids: list[str] | None = None,
 ) -> dict:
     unresolved = unresolved or []
-    shown = set(shown_evidence_ids) if shown_evidence_ids is not None else {e["evidence_id"] for e in evidences}
+    all_ids = {e["evidence_id"] for e in evidences}
+    shown = set(shown_evidence_ids) if shown_evidence_ids is not None else all_ids  # None: 단독 실행(_main) 호환
+    import_check = "sandbox" if USE_SANDBOX else ("static" if _target_symbols() is not None else "skipped")
     errors, warnings = [], []
 
     if rewrite_failed:   # LLM 호출 실패로 원본이 그대로 돌아온 경우: 구버전 메서드만 있는 코드는 아래 검사를 우연히 통과한다
         errors.append(issue("rewrite_failed", "rewriter가 결과를 만들지 못했습니다(LLM 호출 실패). 다시 시도합니다."))
-    if not USE_SANDBOX and _target_symbols() is None:
+    if import_check == "skipped":
         warnings.append(issue("import_check_skipped", "1.x 심볼 덤프(data/raw/symbols)가 없어 import 존재 검사를 건너뜁니다."))
-    try:
-        old_paths = {p for p, _, _ in collect_imports(ast.parse(old_code))}
-    except SyntaxError:
-        old_paths = set()
 
-    tree, syntax_errors = check_syntax(new_code)                       # 1
+    # 원본/새 코드는 한 번씩만 파싱해서 아래 검사들이 같이 쓴다
+    old_tree = _parse(old_code)
+    old_paths = {p for p, _, _ in collect_imports(old_tree)} if old_tree is not None else set()
+    tree, syntax_errors = check_syntax(new_code)                                      # 1
+    used = _names(tree) if tree is not None else None   # None이면 2번이 예외 없이 엄격하게 검사
+
     errors += syntax_errors
-    errors += check_evidence_ids(changes, shown_evidence_ids, evidences, new_code)  # 2
-    errors += check_changes(old_code, new_code, changes)               # 3
+    errors += check_evidence_ids(changes, shown, all_ids, used)                       # 2
+    errors += check_changes(old_code, new_code, changes)                              # 3
 
-    if tree is not None:                                               # 문법이 맞을 때만 import 분석 가능
+    if tree is not None:  # 문법이 맞을 때만 코드 분석 가능
         imports = collect_imports(tree)
-        e4, w4, handled = check_legacy_imports(imports, set(exclude_ids or []))  # 4
-        e5, w5 = check_import_exists(imports, handled, evidences, shown, grounded_keys(evidences, shown), old_paths)  # 5
-        errors += e4 + e5
-        warnings += w4 + w5 + check_legacy_methods(new_code)           # 6
-        e7, w7 = check_unused_imports(tree, old_code)                  # 7
-        errors += e7  # 변환 잔재 import는 재시도시킴
-        errors += check_return_type(old_code, tree)                    # 8
-        warnings += w7
+        ev_paths = evidence_import_paths(evidences, shown)
+        grounded = {loose_key(p) for p, _ in ev_paths}
+
+        e4, w4, handled = check_legacy_imports(imports, set(exclude_ids or []))       # 4
+        e5, w5 = check_import_exists(imports, handled, evidences, shown, grounded, old_paths)  # 5
+        w6 = check_legacy_methods(new_code)                                           # 6 (경고만)
+        e7, w7 = check_unused_imports(tree, used, _names(old_tree))                   # 7
+        e8 = check_return_type(old_code, old_tree, tree)                              # 8
+        e9, w9 = check_undefined_names(tree, old_tree, ev_paths)                      # 9
+        e10 = check_invoke_subscript(tree)                                            # 10
+        e11 = check_chain_io_keys(tree)                                               # 11
+
+        errors += e4 + e5 + e7 + e8 + e9 + e10 + e11
+        warnings += w4 + w5 + w6 + w7 + w9
 
     return {
         "passed": not errors,
@@ -474,7 +797,7 @@ def verify(
             "warnings": len(warnings),
             "changes": len(changes),
             "unresolved": len(unresolved),
-            "import_check": "sandbox" if USE_SANDBOX else ("static" if _target_symbols() is not None else "skipped"),
+            "import_check": import_check,
         },
     }
 
@@ -505,14 +828,14 @@ def verifier_node(state: MigrationState) -> dict:
 
 
 def route_after_verify(state: MigrationState) -> str:
-    """supervisor에서: builder.add_conditional_edges("verifier", route_after_verify,
-                                                    {"retry": "retriever", "done": "report"})"""
+    """통과했거나 최대 시도 횟수에 닿으면 'done', 아니면 'retry'.
+    supervisor.py: builder.add_conditional_edges("verifier", route_after_verify, {"retry": "retriever", "done": END})"""
     if state["verify_result"]["passed"] or state.get("attempt", 0) >= MAX_ATTEMPTS:
         return "done"
     return "retry"
 
 
-# test code 
+# 단독 실행용 테스트 (OpenAI 키 없이 검사 로직만 확인)
 
 SAMPLE_OLD = '''from langchain.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
@@ -534,8 +857,6 @@ print(chain.invoke({"product": "양말"}))'''
 
 
 def _main():
-    from src.rag.retrieval.import_lookup import parse_import_paths
-
     evidences = []
     for path in parse_import_paths(SAMPLE_OLD):
         hit = lookup(path)

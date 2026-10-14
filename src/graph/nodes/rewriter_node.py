@@ -6,16 +6,13 @@
        - 재시도면 이전 시도에서 인용한 근거를 항상 포함한다(pin). 통과했던 줄의 근거가 빠지면 같은 ID를 다시 달 수 없어 검증이 계속 실패하기 때문이다.
     3. LLM을 구조화 출력(RewriteResult)으로 호출한다
        - 필드 누락 같은 일시적 오류는 한 번 재시도하고, 그래도 실패하면 원본 코드를 돌려준다 (노드 하나의 예외로 그래프 전체가 멈추지 않게 하려고)
-    4. 후처리(코드펜스·줄 번호 접두어 제거, 설치 패키지 계산)는 LLM이 아니라 코드로 한다
+    4. 후처리(코드펜스·줄 번호 접두어 제거, 변환 후 안 쓰는 import 삭제, 설치 패키지 계산)는 LLM이 아니라 코드로 한다
     5. new_code, changes, unresolved, rewrite_notes, install_packages, shown_evidence_ids, rewrite_failed를 돌려준다
 
 state.py
     evidences: list[dict]           ← retriever가 채운다. 이 키가 state에 없으면 LangGraph가 조용히 버린다
     shown_evidence_ids: list[str]   ← 이 노드가 채운다
     rewrite_failed: bool            ← 이 노드가 채운다. verifier가 읽어 LLM 호출 실패를 오류로 처리한다
-
-실행 (프로젝트 루트에서, .env에 OPENAI_API_KEY 필요):
-    uv run python app.py    # analyzer → retriever → rewriter → verifier 전체 그래프로 테스트
 """
 
 import ast
@@ -65,7 +62,7 @@ class RewriteResult(BaseModel):
     notes: list[str] = Field(default_factory=list, description="사용자 안내 사항. 한국어")
 
 
-# LLM 
+# LLM (처음 호출할 때 한 번만 생성)
 
 _llm = None
 
@@ -176,8 +173,11 @@ def format_hints(analysis) -> str:
     if not isinstance(analysis, dict):
         return "(없음)"
     findings = analysis.get("findings") or analysis.get("issues") or []
+    # analyzer 스키마가 바뀌어도 동작하게 두 키를 모두 본다 (line / line_start, reason / what_changed)
+    # new_symbol은 일부러 넣지 않는다: analyzer가 근거 없이 추측한 경로라 틀릴 수 있다
     lines = [
-        f"- line {f.get('line')}: {f.get('symbol')} ({f.get('issue_type')}) {f.get('reason')}"
+        f"- line {f.get('line') or f.get('line_start')}: {f.get('symbol')} ({f.get('issue_type')}) "
+        f"{f.get('reason') or f.get('what_changed') or ''}"
         for f in findings if isinstance(f, dict)
     ]
     return "\n".join(lines) if lines else "(없음)"
@@ -224,6 +224,77 @@ def strip_line_numbers(code: str) -> str:
 
 def clean_code(code: str) -> str:
     return strip_line_numbers(strip_fence(code))
+
+
+def _remove_line_from(text: str, line: str) -> tuple[str, bool]:
+    """여러 줄 문자열에서 line과 같은 줄(앞뒤 공백 무시)을 지운다."""
+    lines = text.splitlines()
+    kept = [l for l in lines if l.strip() != line]
+    return "\n".join(kept), len(kept) != len(lines)
+
+
+def drop_leftover_imports(old_code: str, new_code: str, changes: list[dict]) -> tuple[str, list[dict], list[str]]:
+    """변환하고 남은 import 줄을 지우고 changes에 '삭제'로 기록한다.
+    예: LLMChain(...)을 prompt | llm 으로 바꿨는데 from langchain_classic.chains import LLMChain 이 남은 경우.
+
+    LLM이 verifier의 unused_import 피드백을 받아도 이 줄을 반복해서 남기는 일이 있어서(재시도 3회 모두 실패)
+    판단이 필요 없는 기계적인 정리는 코드로 한다. 기준은 verifier의 unused_import 오류와 같다:
+        - from langchain... / from langgraph... import 문이고, 한 줄짜리
+        - 그 줄의 이름을 새 코드에서 하나도 안 쓰고, 원래 코드에서는 모두 쓰던 이름
+    반환: (정리된 new_code, 고친 changes, 지운 이름 목록)"""
+    try:
+        new_tree, old_tree = ast.parse(new_code), ast.parse(old_code)
+    except SyntaxError:
+        return new_code, changes, []   # 문법 오류는 verifier가 잡게 둔다
+
+    used = {n.id for n in ast.walk(new_tree) if isinstance(n, ast.Name)}
+    old_used = {n.id for n in ast.walk(old_tree) if isinstance(n, ast.Name)}
+    new_lines = new_code.splitlines()
+
+    # 1. new_code에서 지울 import 줄 찾기
+    targets = []   # (줄 번호 0부터, 줄 원문, 이름들)
+    for node in ast.walk(new_tree):
+        if not (isinstance(node, ast.ImportFrom) and node.module and node.level == 0
+                and node.module.startswith(("langchain", "langgraph"))
+                and node.lineno == node.end_lineno):
+            continue
+        names = [a.asname or a.name for a in node.names]
+        if "*" in names or any(n in used for n in names) or not all(n in old_used for n in names):
+            continue  # 하나라도 쓰거나, 원래부터 안 쓰던 이름이 섞이면 사용자 코드이므로 건드리지 않음
+        targets.append((node.lineno - 1, new_lines[node.lineno - 1].strip(), names))
+    if not targets:
+        return new_code, changes, []
+
+    # 2. 원래 코드의 import 줄: 이름 → (줄 번호, 원문)
+    old_lines = old_code.splitlines()
+    old_imports = {}
+    for node in ast.walk(old_tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and node.lineno == node.end_lineno:
+            for a in node.names:
+                old_imports[a.asname or a.name] = (node.lineno, old_lines[node.lineno - 1].strip())
+
+    # 3. changes 고치기
+    changes = [dict(c) for c in changes]
+    dropped = []
+    for _, line, names in targets:
+        dropped += names
+        recorded = False
+        for c in changes:   # 3-1. 이 줄을 new로 기록한 변경이 있으면 그 줄만 빼서 '삭제'로 바꿈 (근거 ID는 그대로)
+            c["new"], hit = _remove_line_from(c.get("new") or "", line)
+            if hit:
+                c["reason"] = (c.get("reason") or "") + " (변환 후 쓰지 않아 import 삭제)"
+                recorded = True
+        if recorded:
+            continue
+        old = old_imports.get(names[0])   # 3-2. 기록이 없으면 원래 코드의 그 import 줄을 삭제한 것으로 기록
+        if old and not any(c.get("old_line") == old[0] for c in changes):
+            changes.append({"old_line": old[0], "old": old[1], "new": "", "evidence_ids": [],
+                            "reason": "변환 후 쓰지 않게 된 import라 삭제했습니다."})
+
+    # 4. new_code에서 줄 삭제
+    drop_idx = {i for i, _, _ in targets}
+    new_code = "\n".join(l for i, l in enumerate(new_lines) if i not in drop_idx)
+    return new_code, changes, dropped
 
 
 def required_packages(code: str) -> list[str]:
@@ -307,11 +378,17 @@ def rewrite(
         d["code"] = strip_line_numbers(d["code"])
         unresolved.append(d)
 
+    # 변환 잔재 import 정리 (install_packages 계산보다 먼저 해야 langchain-classic 같은 불필요한 패키지가 빠진다)
+    notes = list(result.notes)
+    new_code, changes, dropped = drop_leftover_imports(old_code, new_code, changes)
+    if dropped:
+        notes.append(f"변환 후 쓰지 않게 된 import를 삭제했습니다: {', '.join(dropped)}")
+
     return {
         "new_code": new_code,
         "changes": changes,
         "unresolved": unresolved,
-        "rewrite_notes": result.notes,
+        "rewrite_notes": notes,
         "install_packages": required_packages(new_code),
         "shown_evidence_ids": shown,
         "rewrite_failed": False,
