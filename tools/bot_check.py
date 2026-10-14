@@ -20,6 +20,9 @@ os.environ.pop("OPENAI_API_KEY", None)          # LLM 호출 없이 점검
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+sys.path.insert(0, str(ROOT))
+from src.ui import db  # noqa: E402
+
 AUTO = "자동 감지"
 COMMON = "from langchain.chat_models import ChatOpenAI\nfrom langchain.chains import LLMChain\n"
 CODES = {
@@ -77,23 +80,24 @@ def main() -> int:
     at = signup(app(), "봇사용자")
     check("가입", not at.exception and any("봇사용자" in m.value for m in at.sidebar.markdown))
     dup = signup(app(), "봇사용자")
-    check("같은 username 가입 막기", any("이미 있는 username" in e.value for e in dup.error))
+    check("같은 아이디 가입 막기 (중복 검사)", any("이미 있는 아이디" in e.value for e in dup.error))
     bad = signup(app(), "a")
-    check("username 규칙 (2~20자)", any("2~20자" in e.value for e in bad.error))
+    check("아이디 규칙 (2~20자)", any("2~20자" in e.value for e in bad.error))
     nobody = login(app(), "없는사람")
-    check("없는 username 로그인 막기", any("없어요" in e.value for e in nobody.error))
+    check("없는 아이디 로그인 막기", any("없어요" in e.value for e in nobody.error))
 
     # 1-1. 세션: 한 대화 안에서 질문 여러 개 → 대화 1개, "새 대화" → 세션 하나 더
     at = signup(app(), "세션봇")
     for text in ("from langchain.chat_models import ChatOpenAI\n", "from langchain.prompts import PromptTemplate\n",
                  "from langchain.chains import LLMChain\n"):
         at.chat_input[0].set_value(text).run()
-    sessions = [b for b in at.sidebar.button if b.key and b.key.startswith("conv_")]
-    check("한 세션에 질문 3개 이어서 저장", len(sessions) == 1 and len(at.session_state["messages"]) == 6,
-          f"세션 {len(sessions)}개 · 메시지 {len(at.session_state['messages'])}개")
+    sessions = [b for b in at.sidebar.button if b.key and b.key.startswith("sess_")]
+    rows = db.get_history(at.session_state["session_id"], "세션봇")
+    check("한 세션에 질문 3개 이어서 저장 (질문+답 = 한 행)", len(sessions) == 1 and len(rows) == 3 and
+          all(r["answer"] for r in rows), f"세션 {len(sessions)}개 · chat_history {len(rows)}행")
     [b for b in at.sidebar.button if "새 대화" in b.label][0].click().run()
     at.chat_input[0].set_value("from langchain.llms import OpenAI\n").run()
-    sessions = [b for b in at.sidebar.button if b.key and b.key.startswith("conv_")]
+    sessions = [b for b in at.sidebar.button if b.key and b.key.startswith("sess_")]
     check("새 대화 → 새 세션", len(sessions) == 2, f"세션 {len(sessions)}개")
 
     # 2. 버전 선택 × 코드
@@ -151,15 +155,16 @@ def main() -> int:
 
     # 5. 대화 기록 다시 불러오기 (새 세션)
     at = login(app(), "봇사용자")
-    convs = [b for b in at.sidebar.button if b.key and b.key.startswith("conv_")]
+    convs = [b for b in at.sidebar.button if b.key and b.key.startswith("sess_")]
     check("대화 목록 저장", len(convs) >= len(VERSION_CASES) + 1, f"{len(convs)}개")
     convs[0].click().run()
     restored = [m.value for m in at.markdown if "LCEL이 뭐야" in m.value]
-    check("대화 다시 열기 (메시지 · 결과 복원)", bool(restored) and any("검증" in m.value for m in at.markdown))
+    check("대화 다시 열기 (질문 · 답 복원)", bool(restored) and bool(last_reply(at)) and
+          any("질문과 답만" in i.value for i in at.info))
 
     # 6. 다른 사용자는 내 대화를 못 봄
     other = signup(app(), "다른사람")
-    others = [b for b in other.sidebar.button if b.key and b.key.startswith("conv_")]
+    others = [b for b in other.sidebar.button if b.key and b.key.startswith("sess_")]
     check("다른 사용자 대화 분리", not others)
 
     print(f"\n{sum(results)}/{len(results)} 통과")

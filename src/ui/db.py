@@ -1,25 +1,27 @@
-"""사용자 · 대화 기록 저장 (TiDB, 없으면 SQLite).
+"""사용자 · 대화 기록 저장 (팀 ERD 2026-10-14, TiDB · 없으면 SQLite).
+
+테이블 (팀 ERD 그대로)
+    users         uuid(PK) · user_id(UNIQUE, 로그인 아이디) · created_at
+    chat_history  uuid(PK) · user_id(FK → users.user_id) · session_id(대화방 단위) · question · answer · created_at
+    관계: 사용자 1명 → 세션 여러 개 → 세션마다 질문 · 답변 여러 행. 인덱스 (session_id, created_at)
 
 접속 정보 우선순위
-    1. 환경 변수 MIGRATION_DB_URL (시험용)
-    2. .streamlit/secrets.toml 의 [tidb] (host, port, user, password, database) → TiDB (MySQL 호환, TLS)
-    3. 둘 다 없으면 data/local_chat.db (SQLite, 내 컴퓨터에서만)
-
-테이블
-    users          user_id(PK) · username(UNIQUE, 중복 금지) · created_at
-    conversations  conv_id(PK) · user_id(FK) · title · source_version · target_version · created_at · updated_at
-    messages       msg_id(PK) · conv_id(FK) · role(user/assistant) · content · result_json · created_at
+    1. 환경 변수 MIGRATION_DB_URL (자동 점검용)
+    2. .env 의 TIDB_HOST · TIDB_USER · TIDB_PASSWORD (+ TIDB_PORT=4000, TIDB_DATABASE=langchain_db) → TiDB (TLS)
+    3. .streamlit/secrets.toml 의 [tidb] (host, port, user, password, database) → TiDB (Streamlit Cloud 용)
+    4. 아무것도 없으면 data/local_chat_history.db (SQLite, 내 컴퓨터에서만)
+TiDB 에 테이블이 이미 있으면 그대로 쓰고, 없으면 같은 구조로 만든다.
 """
 
-import json
 import os
+import uuid
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from sqlalchemy import (Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text, create_engine,
-                        func, insert, select, update)
+from sqlalchemy import (Column, DateTime, ForeignKey, Index, MetaData, String, Table, Text, create_engine, func,
+                        insert, select)
 from sqlalchemy.exc import IntegrityError
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,138 +29,137 @@ meta = MetaData()
 
 users = Table(
     "users", meta,
-    Column("user_id", Integer, primary_key=True, autoincrement=True),
-    Column("username", String(50), nullable=False, unique=True),
+    Column("uuid", String(36), primary_key=True),
+    Column("user_id", String(100), nullable=False, unique=True),
     Column("created_at", DateTime, nullable=False),
 )
-conversations = Table(
-    "conversations", meta,
-    Column("conv_id", Integer, primary_key=True, autoincrement=True),
-    Column("user_id", Integer, ForeignKey("users.user_id"), nullable=False, index=True),
-    Column("title", String(100), nullable=False),
-    Column("source_version", String(20)),
-    Column("target_version", String(20)),
+chat_history = Table(
+    "chat_history", meta,
+    Column("uuid", String(36), primary_key=True),
+    Column("user_id", String(100), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False),
+    Column("session_id", String(100), nullable=False),
+    Column("question", Text, nullable=False),
+    Column("answer", Text),
     Column("created_at", DateTime, nullable=False),
-    Column("updated_at", DateTime, nullable=False),
-)
-messages = Table(
-    "messages", meta,
-    Column("msg_id", Integer, primary_key=True, autoincrement=True),
-    Column("conv_id", Integer, ForeignKey("conversations.conv_id"), nullable=False, index=True),
-    Column("role", String(10), nullable=False),
-    Column("content", Text, nullable=False),
-    Column("result_json", Text),            # 결과 패널에 다시 그릴 결과 (assistant 메시지만)
-    Column("created_at", DateTime, nullable=False),
+    Index("idx_chat_session", "session_id", "created_at"),
 )
 
 
-class UsernameTaken(Exception):
-    """이미 있는 username 으로 가입하려 할 때."""
+class UserIdTaken(Exception):
+    """이미 있는 user_id 로 가입하려 할 때."""
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _tidb_url() -> tuple[str, dict] | None:
+def _new_uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def _tidb_config() -> dict | None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ROOT / ".env")
+    except ImportError:
+        pass
+    if os.environ.get("TIDB_HOST"):
+        return {"host": os.environ["TIDB_HOST"], "port": os.environ.get("TIDB_PORT", 4000),
+                "user": os.environ.get("TIDB_USER", ""), "password": os.environ.get("TIDB_PASSWORD", ""),
+                "database": os.environ.get("TIDB_DATABASE", "langchain_db")}
     try:
         import streamlit as st
         cfg = st.secrets.get("tidb")
     except Exception:
         cfg = None
-    if not cfg:
-        return None
-    import certifi
-    url = (f"mysql+pymysql://{quote_plus(cfg['user'])}:{quote_plus(cfg['password'])}"
-           f"@{cfg['host']}:{cfg.get('port', 4000)}/{cfg.get('database', 'migration_chat')}?charset=utf8mb4")
-    return url, {"ssl": {"ca": certifi.where()}}
+    return dict(cfg) if cfg else None
 
 
 def backend_name() -> str:
     if os.environ.get("MIGRATION_DB_URL"):
         return "test"
-    return "TiDB" if _tidb_url() else "SQLite(로컬)"
+    return "TiDB" if _tidb_config() else "SQLite(로컬)"
 
 
 @lru_cache(maxsize=1)
 def engine():
     if os.environ.get("MIGRATION_DB_URL"):
         eng = create_engine(os.environ["MIGRATION_DB_URL"])
-    elif tidb := _tidb_url():
-        url, connect_args = tidb
-        eng = create_engine(url, connect_args=connect_args, pool_pre_ping=True, pool_recycle=300)
+    elif cfg := _tidb_config():
+        import certifi
+        url = (f"mysql+pymysql://{quote_plus(cfg['user'])}:{quote_plus(cfg['password'])}"
+               f"@{cfg['host']}:{cfg.get('port', 4000)}/{cfg.get('database', 'langchain_db')}?charset=utf8mb4")
+        eng = create_engine(url, connect_args={"ssl": {"ca": certifi.where()}}, pool_pre_ping=True, pool_recycle=300)
     else:
-        path = ROOT / "data" / "local_chat.db"
+        path = ROOT / "data" / "local_chat_history.db"
         path.parent.mkdir(parents=True, exist_ok=True)
         eng = create_engine(f"sqlite:///{path}")
-    meta.create_all(eng)
+    meta.create_all(eng)          # 이미 있는 테이블은 건드리지 않음
     return eng
 
 
 # ---------------------------------------------------------------- 사용자
-def find_user(username: str) -> dict | None:
+def find_user(user_id: str) -> dict | None:
     with engine().connect() as c:
-        row = c.execute(select(users).where(users.c.username == username)).mappings().first()
+        row = c.execute(select(users).where(users.c.user_id == user_id)).mappings().first()
     return dict(row) if row else None
 
 
-def create_user(username: str) -> dict:
-    """새 username 등록. 이미 있으면 UsernameTaken."""
+def user_id_taken(user_id: str) -> bool:
+    """가입 전 중복 검사."""
+    return find_user(user_id) is not None
+
+
+def create_user(user_id: str) -> dict:
+    """새 user_id 등록. 중복이면 UserIdTaken (미리 검사하고, 동시에 가입해도 UNIQUE 로 한 번 더 막음)."""
+    if user_id_taken(user_id):
+        raise UserIdTaken(user_id)
+    row = {"uuid": _new_uuid(), "user_id": user_id, "created_at": _now()}
     try:
         with engine().begin() as c:
-            uid = c.execute(insert(users).values(username=username, created_at=_now())).inserted_primary_key[0]
+            c.execute(insert(users).values(**row))
     except IntegrityError:
-        raise UsernameTaken(username) from None
-    return {"user_id": uid, "username": username}
+        raise UserIdTaken(user_id) from None
+    return row
 
 
-# ---------------------------------------------------------------- 대화
-def list_conversations(user_id: int, limit: int = 50) -> list[dict]:
-    with engine().connect() as c:
-        rows = c.execute(select(conversations).where(conversations.c.user_id == user_id)
-                         .order_by(conversations.c.updated_at.desc()).limit(limit)).mappings().all()
-    return [dict(r) for r in rows]
+# ---------------------------------------------------------------- 대화 (세션 = session_id 하나)
+def new_session_id() -> str:
+    return _new_uuid()
 
 
-def create_conversation(user_id: int, title: str, source_version: str | None, target_version: str) -> int:
+def add_turn(user_id: str, session_id: str, question: str, answer: str | None) -> None:
+    """질문 하나와 그 답을 한 행으로 저장."""
     with engine().begin() as c:
-        return c.execute(insert(conversations).values(
-            user_id=user_id, title=title[:100], source_version=source_version or "auto",
-            target_version=target_version, created_at=_now(), updated_at=_now())).inserted_primary_key[0]
+        c.execute(insert(chat_history).values(uuid=_new_uuid(), user_id=user_id, session_id=session_id,
+                                              question=question, answer=answer, created_at=_now()))
 
 
-def get_conversation(conv_id: int, user_id: int) -> dict | None:
-    """내 대화(세션) 하나의 정보. 다른 사용자 것이면 None."""
+def list_sessions(user_id: str, limit: int = 50) -> list[dict]:
+    """내 세션 목록 (최근 대화 순). 제목은 그 세션의 첫 질문."""
+    h = chat_history
     with engine().connect() as c:
-        row = c.execute(select(conversations).where(conversations.c.conv_id == conv_id,
-                                                    conversations.c.user_id == user_id)).mappings().first()
-    return dict(row) if row else None
-
-
-def get_messages(conv_id: int, user_id: int) -> list[dict]:
-    """내 대화의 메시지만 돌려준다 (다른 사용자의 conv_id 를 넣으면 빈 목록)."""
-    with engine().connect() as c:
-        owner = c.execute(select(conversations.c.user_id).where(conversations.c.conv_id == conv_id)).scalar()
-        if owner != user_id:
-            return []
-        rows = c.execute(select(messages).where(messages.c.conv_id == conv_id)
-                         .order_by(messages.c.msg_id)).mappings().all()
-    out = []
-    for r in rows:
-        m = dict(r)
-        m["result"] = json.loads(m.pop("result_json")) if m.get("result_json") else None
-        out.append(m)
+        rows = c.execute(select(h.c.session_id, func.min(h.c.created_at).label("started_at"),
+                                func.max(h.c.created_at).label("last_at"), func.count().label("turns"))
+                         .where(h.c.user_id == user_id).group_by(h.c.session_id)
+                         .order_by(func.max(h.c.created_at).desc()).limit(limit)).mappings().all()
+        out = []
+        for r in rows:
+            first = c.execute(select(h.c.question).where(h.c.session_id == r["session_id"])
+                              .order_by(h.c.created_at).limit(1)).scalar() or ""
+            out.append({**dict(r), "title": first.strip().splitlines()[0][:30] if first.strip() else "새 대화"})
     return out
 
 
-def add_message(conv_id: int, role: str, content: str, result: dict | None = None) -> None:
-    with engine().begin() as c:
-        c.execute(insert(messages).values(conv_id=conv_id, role=role, content=content,
-                                          result_json=json.dumps(result, ensure_ascii=False) if result else None,
-                                          created_at=_now()))
-        c.execute(update(conversations).where(conversations.c.conv_id == conv_id).values(updated_at=_now()))
-
-
-def count_messages(conv_id: int) -> int:
+def get_history(session_id: str, user_id: str) -> list[dict]:
+    """내 세션의 질문 · 답변 (시간순). 다른 사용자의 세션이면 빈 목록."""
+    h = chat_history
     with engine().connect() as c:
-        return c.execute(select(func.count()).select_from(messages).where(messages.c.conv_id == conv_id)).scalar()
+        rows = c.execute(select(h).where(h.c.session_id == session_id, h.c.user_id == user_id)
+                         .order_by(h.c.created_at)).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def session_info(session_id: str, user_id: str) -> dict | None:
+    rows = get_history(session_id, user_id)
+    return {"session_id": session_id, "started_at": rows[0]["created_at"], "turns": len(rows)} if rows else None
