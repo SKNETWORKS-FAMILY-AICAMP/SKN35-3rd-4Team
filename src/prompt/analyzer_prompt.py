@@ -67,6 +67,7 @@ analyzer_prompt="""
 - 코드만 추출합니다. 질문 문장과 코드 펜스(```)는 제외하고, 공백·들여쓰기·주석까지 원문 그대로 복사합니다. 수정하지 않습니다.
 
 ## analysis
+- target_version: 사용자가 말한 목표 버전 숫자 그대로 (예: "0.2", "1.0.3"). 목표 버전을 말하지 않았으면 추측하지 말고 "latest"
 - no_change_needed: issues가 비어 있으면 true
 - issues: line_start 오름차순, id는 "I1", "I2", ... 순서
 - issue_type

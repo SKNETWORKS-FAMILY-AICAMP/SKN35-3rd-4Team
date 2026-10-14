@@ -43,11 +43,12 @@ def retriever_node(state: MigrationState) -> dict:
     query = (state.get("old_code") or "").strip() or state["question"]
     attempt = state.get("attempt", 0)
     exclude_ids = set(state.get("exclude_ids") or [])
+    target = state.get("target_version")  # 없으면 엔진이 최신으로 처리
     engine = get_retriever_engine()
 
     evidences = {
         e.evidence_id: {**e.to_dict(), "finding_ids": []}
-        for e in engine.retrieve(query, attempt=attempt, exclude_ids=exclude_ids)
+        for e in engine.retrieve(query, attempt=attempt, exclude_ids=exclude_ids, target_version=target)
     }
 
     for idx, finding in enumerate(get_findings(state.get("analysis")), start=1):
@@ -61,7 +62,8 @@ def retriever_node(state: MigrationState) -> dict:
             continue
 
         finding_query = "\n".join(filter(None, [finding.get("code"), finding.get("symbol")]))
-        for e in engine.retrieve(finding_query, k=FINDING_DOC_K, attempt=attempt, exclude_ids=exclude_ids):
+        for e in engine.retrieve(finding_query, k=FINDING_DOC_K, attempt=attempt, exclude_ids=exclude_ids,
+                                 target_version=target):
             if e.source not in DOC_SOURCES:
                 continue
             ev = evidences.setdefault(e.evidence_id, {**e.to_dict(), "finding_ids": []})

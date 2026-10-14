@@ -18,7 +18,7 @@ import urllib.request
 import warnings
 import zipfile
 
-from . import OLD_VERSIONS, TARGET_VERSIONS, SYMBOLS_DIR, symbols_path
+from . import OLD_VERSIONS, TARGET_VERSIONS, VERSION_SETS, SYMBOLS_DIR, symbols_path
 
 PYPI_JSON = "https://pypi.org/pypi/{package}/{version}/json"
 DEPRECATED_KEYS = ("since", "removal", "alternative", "alternative_import", "pending", "message")
@@ -238,7 +238,8 @@ def write_jsonl(path, records):
 def main():
     SYMBOLS_DIR.mkdir(parents=True, exist_ok=True)
     jobs = [(p, v) for p, vs in OLD_VERSIONS.items() for v in vs] + list(TARGET_VERSIONS.items())
-    for package, version in jobs:
+    jobs += [(p, v) for s in VERSION_SETS.values() for p, v in s.items()]
+    for package, version in dict.fromkeys(jobs):  # 순서 유지 중복 제거
         records = extract_package(package, version)
         write_jsonl(symbols_path(package, version), records)
         deprecated = sum("deprecated" in r for r in records)
