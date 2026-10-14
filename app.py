@@ -1,10 +1,10 @@
 import json
-from src.graph.supervisor import migration_pipeline
+from langchain_core.messages import HumanMessage
+# from src.graph.supervisor import migration_pipeline
+from src.graph.graph import supervisor
 
 def main():
-    supervisor = migration_pipeline()
-    result = supervisor.invoke({
-            "question": """야 내가 지금 온라인 쇼핑몰 고객센터(CS)팀에서 업무 자동화를 맡고 있거든
+    question = """야 내가 지금 온라인 쇼핑몰 고객센터(CS)팀에서 업무 자동화를 맡고 있거든
 
 [상황]
 - 매일 아침 전날 들어온 고객 문의를 CSV로 내려받아, 문의 유형을 분류하고 답변 초안을 만드는 스크립트를 돌리고 있음
@@ -66,8 +66,10 @@ if __name__ == "__main__":
     count = process_csv("inquiries.csv", "drafts.csv")
     print(f"{count}건 답변 초안 생성 완료")
 ```"""
-        }
-    )
+
+    # supervisor = migration_pipeline()
+    # result = supervisor.invoke({ "question": question })
+    result = supervisor.invoke({ "messages": [HumanMessage(content=question)] })
 
     print("\n[응답]")
     print(result.get("new_code") or result.get("old_code"))
