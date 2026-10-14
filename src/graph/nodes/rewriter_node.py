@@ -68,7 +68,11 @@ class RewriteResult(BaseModel):
 # LLM (처음 호출할 때 한 번만 생성)
 
 _llm = None
+<<<<<<< Updated upstream
 
+=======
+    
+>>>>>>> Stashed changes
 
 def get_structured_llm():
     """temperature=0: 변환은 창의성이 아니라 재현성이 중요하다.
