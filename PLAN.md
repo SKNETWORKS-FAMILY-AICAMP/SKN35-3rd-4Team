@@ -55,26 +55,21 @@ LangGraph:  ① analyzer → ② retriever → ③ rewriter → ④ verifier ─
 ## 1-4 RAG 테스트의 전체 구조
 
 ```mermaid
-flowchart TD
-    Q["<b>사용자 질문 (Question)</b><br/>'이 코드 1.x로 바꿔 줘'<br/><code>from langchain.chains import LLMChain</code>"]
+%%{init: {"theme":"base","themeVariables":{"fontSize":"15px","lineColor":"#94A3B8"},"flowchart":{"curve":"basis","nodeSpacing":40,"rankSpacing":40,"padding":14}}}%%
+flowchart LR
+    Q(["💬 질문<br/>옛 버전 코드"]):::io
+    A["<b>① analyzer</b><br/>바꿀 부분 찾기<br/>─────<br/>1차 · 탐지율"]:::step
+    R["<b>② retriever</b><br/>근거 검색<br/>─────<br/>2차 · Hit@k · MRR"]:::step
+    W["<b>③ rewriter</b><br/>코드 다시 쓰기<br/>─────<br/>3차 · 변경 정확도"]:::step
+    V{{"<b>④ verifier</b><br/>실행 검증<br/>─────<br/>4차 · 통과율<br/>실패 → ②로 (최대 3회)"}}:::check
+    P(["<b>⑤ report</b><br/>답변 + 근거<br/>─────<br/>5차 · 근거 정확도"]):::io
 
-    A["<b>① analyzer : 분석</b><br/>질문의 코드에서 바꿔야 할 부분 찾기<br/>━━━━━━━━━━<br/>1차 평가: Analysis<br/>탐지 재현율 · 탐지 정밀도"]
+    Q --> A --> R --> W --> V
+    V -- 통과 --> P
 
-    R["<b>② retriever : 검색 + Vector DB</b><br/>대응표 정확 매칭 + 문서 하이브리드 검색 (Top-k)<br/>━━━━━━━━━━<br/>2차 평가: Retrieval<br/>Hit@k · Recall@k · MRR · 대응표 매칭률"]
-
-    C["<b>검색된 근거 (Context)</b><br/>LLMChain → prompt | llm<br/>imap-… · mmap-… · doc-…"]
-
-    W["<b>③ rewriter : 코드 작성</b><br/>근거를 보고 목표 버전 코드로 다시 쓰기<br/>━━━━━━━━━━<br/>3차 평가: Generation<br/>변경 정확도 · 근거 ID 포함률 · 기능 보존"]
-
-    V{"<b>④ verifier : 코드 검증</b><br/>문법 · import 존재 · 남은 옛 코드 등 8가지 검사<br/>━━━━━━━━━━<br/>4차 평가: Verification<br/>검증 통과율 · 재시도 효과 · 평균 시도 횟수"}
-
-    P["<b>⑤ report : 답변 생성</b><br/>새 코드 + 바뀐 곳 + 근거 + 시도 횟수<br/>━━━━━━━━━━<br/>5차 평가: Grounding / Citation<br/>근거 링크 정확도 · 안내 완성도"]
-
-    O["<b>6차 평가: 운영</b><br/>응답 시간 · 오류율 · 토큰 비용 · 안정성"]
-
-    Q --> A --> R --> C --> W --> V
-    V -- "통과" --> P --> O
-    V -. "실패: 에러 + 틀린 근거 제외<br/>(최대 3회)" .-> R
+    classDef io fill:#F0FDF4,stroke:#16A34A,color:#14532D
+    classDef step fill:#EEF2FF,stroke:#6366F1,color:#1E293B
+    classDef check fill:#FFF7ED,stroke:#EA580C,color:#7C2D12
 ```
 | 단계 | 하는 일 | 담당 |
 |---|---|---|
