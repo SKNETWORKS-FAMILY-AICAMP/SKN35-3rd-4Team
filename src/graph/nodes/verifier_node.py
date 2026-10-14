@@ -182,7 +182,7 @@ def collect_imports(tree: ast.AST) -> list[tuple[str, int, bool]]:
 
 # 4. 구버전 import 잔존
 
-def check_legacy_imports(imports) -> tuple[list[dict], list[dict], set[str]]:
+def check_legacy_imports(imports, exclude_ids: set[str] | frozenset[str] = frozenset()) -> tuple[list[dict], list[dict], set[str]]:
     """대응표(import_map)에 '구 경로'로 등록된 경로가 남았는지 본다.
     대응표에 1.x 경로가 있으면 경로 교체에는 사용법 근거가 필요 없으므로(프롬프트 규칙 1, 2(b), 7)
     남아 있으면 rewriter가 근거를 놓친 것 → 오류. 1.x 경로가 없으면(unresolved) 바꿀 수 없으므로 경고.
@@ -434,6 +434,7 @@ def verify(
     shown_evidence_ids: list[str] | None = None,
     unresolved: list[dict] | None = None,
     rewrite_failed: bool = False,
+    exclude_ids: list[str] | None = None,
 ) -> dict:
     unresolved = unresolved or []
     shown = set(shown_evidence_ids) if shown_evidence_ids is not None else {e["evidence_id"] for e in evidences}
@@ -455,7 +456,7 @@ def verify(
 
     if tree is not None:                                               # 문법이 맞을 때만 import 분석 가능
         imports = collect_imports(tree)
-        e4, w4, handled = check_legacy_imports(imports)                # 4
+        e4, w4, handled = check_legacy_imports(imports, set(exclude_ids or []))  # 4
         e5, w5 = check_import_exists(imports, handled, evidences, shown, grounded_keys(evidences, shown), old_paths)  # 5
         errors += e4 + e5
         warnings += w4 + w5 + check_legacy_methods(new_code)           # 6
@@ -494,6 +495,7 @@ def verifier_node(state: MigrationState) -> dict:
         shown_evidence_ids=state.get("shown_evidence_ids"),
         unresolved=state.get("unresolved", []),
         rewrite_failed=state.get("rewrite_failed", False),
+        exclude_ids=state.get("exclude_ids", []),
     )
     return {
         "verify_result": result,

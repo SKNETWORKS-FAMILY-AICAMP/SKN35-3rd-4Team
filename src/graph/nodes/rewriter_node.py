@@ -68,11 +68,6 @@ class RewriteResult(BaseModel):
 # LLM (처음 호출할 때 한 번만 생성)
 
 _llm = None
-<<<<<<< Updated upstream
-
-=======
-    
->>>>>>> Stashed changes
 
 def get_structured_llm():
     """temperature=0: 변환은 창의성이 아니라 재현성이 중요하다.
@@ -377,7 +372,7 @@ def _main():
         # 3. 검증
         result = verify(SAMPLE_CODE, out["new_code"], out["changes"], evidences,
                         shown_evidence_ids=out["shown_evidence_ids"], unresolved=out["unresolved"],
-                        rewrite_failed=out["rewrite_failed"])
+                        rewrite_failed=out["rewrite_failed"], exclude_ids=state["exclude_ids"])
 
         print(f"\n========== 시도 {attempt + 1}/{MAX_ATTEMPTS}  (근거 {len(evidences)}개) ==========")
         print("[new_code]\n" + out["new_code"])
