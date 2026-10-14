@@ -193,6 +193,10 @@ pyrightconfig.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
+
+# 로컬 벡터DB
+data/vectordb
+
 # 4번 화면: 비밀 값, 로컬 대화 기록
 .streamlit/secrets.toml
 data/local_chat.db

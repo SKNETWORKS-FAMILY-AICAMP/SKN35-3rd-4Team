@@ -1,11 +1,3 @@
-"""chunks.jsonl 을 OpenAI 임베딩으로 Chroma 에 적재한다.
-
-- 벡터 ID = chunk_id (검색 결과가 그대로 MigrateState.evidence_id 가 된다)
-- 증분 갱신: 메타데이터의 text_hash 를 비교해 새로 생기거나 바뀐 청크만 임베딩하고,
-  chunks.jsonl 에서 사라진 청크는 지운다
-- Chroma 메타데이터는 스칼라만 받으므로 리스트는 쉼표 문자열로, None 은 뺀다
-"""
-
 import hashlib
 import json
 import sys
@@ -17,7 +9,7 @@ from langchain_openai import OpenAIEmbeddings
 
 from . import (
     ADD_BATCH_SIZE, CHUNKS_PATH, COLLECTION_NAME, DISTANCE, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL,
-    ENV_PATH, MAX_RETRIES, ROOT, VECTORDB_DIR,
+    ENV_PATH, MAX_RETRIES, ROOT, cloud_client,
 )
 
 METADATA_FIELDS = [
@@ -32,6 +24,9 @@ SMOKE_QUERIES = [
     "initialize_agent AgentExecutor create_agent",
 ]
 
+import os
+import chromadb
+from langchain_chroma import Chroma
 
 def text_hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
@@ -56,7 +51,7 @@ def open_store() -> Chroma:
     store = Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=embeddings,
-        persist_directory=str(VECTORDB_DIR),
+        client=cloud_client(),
         collection_metadata={
             "hnsw:space": DISTANCE,
             "embedding_model": EMBEDDING_MODEL,
@@ -69,7 +64,7 @@ def open_store() -> Chroma:
             stored.get("embedding_dimensions", EMBEDDING_DIMENSIONS) != EMBEDDING_DIMENSIONS:
         raise SystemExit(
             f"Collection was built with {stored.get('embedding_model')}/{stored.get('embedding_dimensions')}, "
-            f"config is {EMBEDDING_MODEL}/{EMBEDDING_DIMENSIONS}. Delete {VECTORDB_DIR} to rebuild."
+            f"config is {EMBEDDING_MODEL}/{EMBEDDING_DIMENSIONS}. Delete collection{COLLECTION_NAME} to rebuild."
         )
     return store
 
@@ -114,7 +109,7 @@ def main():
         add_with_retry(store, pending[start:start + ADD_BATCH_SIZE])
         print(f"  {min(start + ADD_BATCH_SIZE, len(pending))}/{len(pending)}")
 
-    print(f"완료: 컬렉션 {COLLECTION_NAME} = {store._collection.count()}개 ({VECTORDB_DIR.relative_to(ROOT)})")
+    print(f"완료: 컬렉션 {COLLECTION_NAME} = {store._collection.count()}개")
 
     print("\n확인용 검색 (상위 3개, 코사인 거리)")
     for query in SMOKE_QUERIES:
