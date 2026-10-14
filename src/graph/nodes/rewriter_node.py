@@ -14,8 +14,8 @@ state.py
     shown_evidence_ids: list[str]   ← 이 노드가 채운다
     rewrite_failed: bool            ← 이 노드가 채운다. verifier가 읽어 LLM 호출 실패를 오류로 처리한다
 
-단독 실행 (프로젝트 루트에서, .env에 OPENAI_API_KEY 필요):
-    uv run python -m src.graph.nodes.rewriter_node
+실행 (프로젝트 루트에서, .env에 OPENAI_API_KEY 필요):
+    uv run python app.py    # analyzer → retriever → rewriter → verifier 전체 그래프로 테스트
 """
 
 import ast
@@ -65,7 +65,7 @@ class RewriteResult(BaseModel):
     notes: list[str] = Field(default_factory=list, description="사용자 안내 사항. 한국어")
 
 
-# LLM (처음 호출할 때 한 번만 생성)
+# LLM 
 
 _llm = None
 
@@ -333,67 +333,3 @@ def rewriter_node(state: MigrationState) -> dict:
         prev_changes=state.get("changes", []) if retrying else [],
         exclude_ids=state.get("exclude_ids", []),
     )
-
-
-# test code 
-
-SAMPLE_CODE = '''from langchain.chat_models import ChatOpenAI
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-
-llm = ChatOpenAI(temperature=0)
-prompt = PromptTemplate.from_template("{product}을 만드는 회사 이름을 지어줘")
-chain = LLMChain(llm=llm, prompt=prompt)
-print(chain.run(product="양말"))'''
-
-
-def _main():
-    """그래프와 같은 순서로 retriever → rewriter → verifier를 최대 MAX_ATTEMPTS번 돌린다.
-    retriever_node가 아직 없어서 여기서 RetrievalEngine을 직접 부른다."""
-    from src.graph.nodes.verifier_node import MAX_ATTEMPTS, faulty_evidence_ids, verify
-    from src.rag.retrieval.hybrid import RetrievalEngine
-
-    engine = RetrievalEngine()
-    state: dict = {"verify_result": None, "new_code": None, "changes": [], "exclude_ids": []}
-
-    for attempt in range(MAX_ATTEMPTS):
-        # 1. 검색: 재시도마다 attempt로 검색 폭을 넓히고 틀린 근거는 뺌
-        evidences = [e.to_dict() for e in engine.retrieve(SAMPLE_CODE, attempt=attempt,
-                                                          exclude_ids=set(state["exclude_ids"]))]
-        retrying = is_retry(state["verify_result"])
-
-        # 2. 재작성: 재시도면 직전 결과와 검증 실패 이유를 같이 넘김
-        out = rewrite(SAMPLE_CODE, evidences,
-                      verify_result=state["verify_result"],
-                      prev_code=state["new_code"] if retrying else None,
-                      prev_changes=state["changes"] if retrying else [],
-                      exclude_ids=state["exclude_ids"])
-
-        # 3. 검증
-        result = verify(SAMPLE_CODE, out["new_code"], out["changes"], evidences,
-                        shown_evidence_ids=out["shown_evidence_ids"], unresolved=out["unresolved"],
-                        rewrite_failed=out["rewrite_failed"], exclude_ids=state["exclude_ids"])
-
-        print(f"\n========== 시도 {attempt + 1}/{MAX_ATTEMPTS}  (근거 {len(evidences)}개) ==========")
-        print("[new_code]\n" + out["new_code"])
-        print("\n[changes]")
-        for c in out["changes"]:
-            print(f"  L{c['old_line']}: {c['old']!r} → {c['new']!r}  {c['evidence_ids']}  ({c['reason']})")
-        print("[unresolved]", out["unresolved"] or "없음")
-        print("[notes]", out["rewrite_notes"])
-        print("[install]", out["install_packages"])
-        print(f"[verify] passed={result['passed']}")
-        for e in result["errors"]:
-            print(f"  ERROR {e['type']}: {e['message']}")
-        for w in result["warnings"]:
-            print(f"  warn  {w['type']}: {w.get('path') or ''} {w['message']}")
-
-        if result["passed"]:
-            break
-        # 4. 다음 시도 준비: state에 쌓이는 값은 그래프와 같은 규칙으로 갱신함
-        state.update(verify_result=result, new_code=out["new_code"], changes=out["changes"],
-                     exclude_ids=sorted(set(state["exclude_ids"]) | set(faulty_evidence_ids(result["errors"]))))
-
-
-if __name__ == "__main__":
-    _main()
