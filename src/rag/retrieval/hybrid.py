@@ -154,7 +154,7 @@ class RetrievalEngine:
             elif hit.record["id"] not in exclude_ids:
                 map_evidence.append(self._map_evidence(hit, "exact", 1.0))
 
-        # ①-2 메서드 호출 정확매칭 (chain.run(), llm.predict(), llm("...") 등)
+        # ② 메서드 호출 정확매칭 (chain.run(), llm.predict(), llm("...") 등)
         method_hits = [r for r in lookup_methods(query) if r["id"] not in exclude_ids]
         method_evidence = [self._method_evidence(r) for r in method_hits]
         doc_refs = {p for r in method_hits for p in r.get("doc_refs", [])}
@@ -177,7 +177,7 @@ class RetrievalEngine:
                 if len(seen_new) >= FUZZY_MAP_K:
                     break
 
-        # ② 문서 하이브리드 검색 (정확매칭된 1.x 경로·대안 텍스트로 질의 확장)
+        # ④ 문서 하이브리드 검색 (정확매칭된 1.x 경로·대안 텍스트로 질의 확장)
         exact = [e for e in map_evidence if e.match == "exact"]
         expansion = [e.new for e in exact if e.new] + [e.alternative for e in exact if e.alternative]
         expansion += [r["alternative"] for r in method_hits if r.get("alternative")]
@@ -192,7 +192,7 @@ class RetrievalEngine:
                 chunk_id = self.doc_ids[best[0][0]]
                 scores[chunk_id] = max(scores.get(chunk_id, 0.0), anchor)
 
-        # ④ 규칙 기반 재정렬
+        # ⑤ 규칙 기반 재정렬
         target_keys = {loose_key(e.new) for e in exact if e.new}
         ranked = []
         for chunk_id, score in scores.items():

@@ -1,10 +1,12 @@
-"""검색 엔진 (6단계).
+"""검색 엔진 (5단계, 실행 순서).
 
 흐름:
-    ① 대응표 정확매칭 (import 문/경로 → imap-… 근거, 메서드 호출 → mmap-… 근거)
-    ② 문서 하이브리드 검색: 벡터(Chroma) + BM25, RRF 로 순위 융합
+    ① import 대응표 정확매칭 (import 문/경로 → imap-… 근거)
+    ② 메서드 대응표 정확매칭 (메서드 호출 → mmap-… 근거, 근거 문서 페이지 doc_refs 수집)
     ③ ①에서 못 찾은 경로만 대응표 유사 검색 (같은 1.x 경로는 하나로)
-    ④ 규칙 기반 재정렬 (최신 문서 우선, 정답 import 를 쓰는 문서 가산, 페이지당 개수 제한)
+    ④ 문서 하이브리드 검색: 벡터(Chroma) + BM25, RRF 로 순위 융합
+       (①의 1.x 경로·대안으로 질의 확장, ②의 doc_refs 페이지 청크는 상위권 점수로)
+    ⑤ 규칙 기반 재정렬 (최신 문서 우선, 정답 import 를 쓰는 문서 가산, 페이지당 개수 제한)
 
 터미널에서 바로 질의:
     uv run python -m src.rag.retrieval.hybrid "from langchain.chains import LLMChain"
