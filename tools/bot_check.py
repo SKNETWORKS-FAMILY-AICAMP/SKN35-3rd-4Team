@@ -46,7 +46,7 @@ def check(name: str, ok: bool, why: str = "") -> None:
 
 
 def app() -> AppTest:
-    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=60)
+    at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=60)
     at.run()
     return at
 
