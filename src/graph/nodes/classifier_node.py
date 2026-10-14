@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from src.graph.state import RootState
+from src.graph.state import RootState, MigrationState
 from src.prompt.classifier_prompt import classifier_prompt
 
 load_dotenv()
@@ -12,7 +12,7 @@ def classifier_node(state: RootState):
     response = llm.invoke(
         [
             SystemMessage(content=classifier_prompt),
-            HumanMessage(content=state["question"]),
+            HumanMessage(content=state["messages"][-1].content),
         ]
     )
 

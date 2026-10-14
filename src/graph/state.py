@@ -12,7 +12,7 @@ class RootState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     classification: str
 
-class MigrationState(TypedDict):
+class MigrationState(RootState):
     question: str
     old_code: NotRequired[str]      # 사용자가 질문한 코드
     analysis: NotRequired[dict | str]      # 분석 결과 (analyzer는 dict로 넣음)
