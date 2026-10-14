@@ -75,27 +75,50 @@ def _tidb_config() -> dict | None:
     return dict(cfg) if cfg else None
 
 
+_tidb_error: str | None = None     # TiDB 접속 정보는 있는데 연결에 실패한 이유
+
+
 def backend_name() -> str:
     if os.environ.get("MIGRATION_DB_URL"):
         return "test"
+    engine()
+    if _tidb_error:
+        return f"SQLite(로컬) · TiDB 연결 실패: {_tidb_error}"
     return "TiDB" if _tidb_config() else "SQLite(로컬)"
+
+
+def _sqlite():
+    path = ROOT / "data" / "local_chat_history.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    eng = create_engine(f"sqlite:///{path}")
+    meta.create_all(eng)
+    return eng
 
 
 @lru_cache(maxsize=1)
 def engine():
+    global _tidb_error
     if os.environ.get("MIGRATION_DB_URL"):
         eng = create_engine(os.environ["MIGRATION_DB_URL"])
-    elif cfg := _tidb_config():
-        import certifi
-        url = (f"mysql+pymysql://{quote_plus(cfg['user'])}:{quote_plus(cfg['password'])}"
-               f"@{cfg['host']}:{cfg.get('port', 4000)}/{cfg.get('database', 'langchain_db')}?charset=utf8mb4")
-        eng = create_engine(url, connect_args={"ssl": {"ca": certifi.where()}}, pool_pre_ping=True, pool_recycle=300)
-    else:
-        path = ROOT / "data" / "local_chat_history.db"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        eng = create_engine(f"sqlite:///{path}")
-    meta.create_all(eng)          # 이미 있는 테이블은 건드리지 않음
-    return eng
+        meta.create_all(eng)
+        return eng
+    cfg = _tidb_config()
+    if not cfg:
+        return _sqlite()
+    if not all(str(cfg.get(k, "")).isascii() and cfg.get(k) for k in ("host", "user", "password")):
+        _tidb_error = ".env 값이 아직 예시 그대로"
+        return _sqlite()
+    import certifi
+    url = (f"mysql+pymysql://{quote_plus(str(cfg['user']))}:{quote_plus(str(cfg['password']))}"
+           f"@{cfg['host']}:{cfg.get('port', 4000)}/{cfg.get('database', 'langchain_db')}?charset=utf8mb4")
+    try:
+        eng = create_engine(url, connect_args={"ssl": {"ca": certifi.where()}, "connect_timeout": 10},
+                            pool_pre_ping=True, pool_recycle=300)
+        meta.create_all(eng)          # 이미 있는 테이블은 건드리지 않음
+        return eng
+    except Exception as e:            # 값이 비었거나 틀리면 화면은 로컬 저장으로 계속 동작
+        _tidb_error = type(e).__name__
+        return _sqlite()
 
 
 # ---------------------------------------------------------------- 사용자
