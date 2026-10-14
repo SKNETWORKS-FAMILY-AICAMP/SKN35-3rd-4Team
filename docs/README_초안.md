@@ -1,13 +1,30 @@
 > **README 초안 (4번 작성, 2026-10-14)** · 팀 저장소 README는 1번이 관리합니다. 필요한 부분을 골라 README에 옮겨 주세요. 배포용 완성본은 [langchain-migration-assistant](https://github.com/SKN35shimsungwook/langchain-migration-assistant)에 있습니다.
 
+<div align="center">
+
 # LangChain 버전 마이그레이션 코드 어시스턴트
 
-> 옛 버전 LangChain 코드를 넣고 바꿀 버전을 고르면, **그 버전에서 돌아가는 코드로 고쳐 주고 정말 돌아가는지 검사까지 하는** 코드 마이그레이션 챗봇
+**옛 버전 LangChain 코드를 넣으면, 원하는 버전에서 돌아가는 코드로 고치고 근거와 검사 결과까지 보여 주는 챗봇**
 
-**문서 근거**(import · 메서드 대응표, 최신 공식 문서 검색)로 고치고, **검사 근거**(verifier 11가지, LLM 없이)로 확인합니다.
-검사에 실패하면 실패 이유를 들고 근거를 다시 찾아 최대 3번 고칩니다. 바뀐 줄마다 근거 ID가 붙습니다.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1.4.4-1C3C3C?logo=langchain&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.6x-FF4B4B?logo=streamlit&logoColor=white)
+![TiDB](https://img.shields.io/badge/TiDB-Cloud-E30C34)
+![Chroma](https://img.shields.io/badge/Chroma-Cloud-F2A33A)
+![검사](https://img.shields.io/badge/자동_점검-30%2F30-2EA44F)
+![질문](https://img.shields.io/badge/평가_질문-36%2F36_검사-2EA44F)
 
-**바로 가기**: [화면 실행 방법](화면_실행방법.md) · [DB 설계(ERD)](DB_설계.md) · [평가 질문 36개](../eval/README.md) · [머지 가이드](머지_가이드.md) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
+[구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
+
+</div>
+
+<!-- 데모 GIF 자리: 화면에서 확인용 예제를 보내 결과 패널이 나오는 15초 녹화를 docs/images/demo.gif 로 넣고 아래 주석을 풀어 주세요
+<p align="center"><img src="docs/images/demo.gif" width="860" alt="확인용 예제를 보내면 근거 ID가 붙은 변환 결과가 나오는 화면"></p>
+-->
+
+> **문서 근거**(import · 메서드 대응표, 최신 공식 문서 검색)로 고치고, **검사 근거**(verifier 11가지, LLM 없이)로 확인합니다.
+> 검사에 실패하면 실패 이유를 들고 근거를 다시 찾아 최대 3번 고칩니다. 바뀐 줄마다 근거 ID가 붙습니다.
 
 | | |
 |---|---|
