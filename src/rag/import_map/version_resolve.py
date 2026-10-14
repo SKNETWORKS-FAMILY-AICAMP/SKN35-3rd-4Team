@@ -13,6 +13,7 @@
     3. 1에서 deprecated였는데 갈 곳이 없으면 그대로 keep (deprecated 정보 포함)
     4. 경로의 최상위 패키지를 목표 세트가 모르면 unknown, 알면 not_available
 목표 세트 밖 패키지(langchain_aws, pydantic 등)에 닿은 경로는 존재를 확인할 수 없어 verified=False.
+경로 자체가 목표 세트 밖 패키지면 2의 후보가 deprecated일 때 옮기지 않고 keep(verified=False).
 """
 
 import re
@@ -175,6 +176,10 @@ def resolve(path: str, target: str = LATEST_VERSION) -> Resolution:
         chain, ids, verified = found
         new = chain[-1]
         new_deprecation = table.deprecation(new) if verified else None
+        # 목표 세트 밖 패키지(0.x 목표의 langchain_openai 등)는 그 버전에도 쓸 수 있을 수 있어
+        # deprecated 경로로는 옮기지 않는다 (langserve.pydantic_v1 → pydantic 같은 밖→밖 이동은 그대로)
+        if _is_external(path, target) and new_deprecation is not None:
+            return Resolution(path, target, "keep", new=path, chain=(path,), verified=False)
         # deprecated → deprecated는 정의가 있는 패키지 쪽으로 갈 때만 (community 별칭 → classic 정의는 허용,
         # 같은 패키지 안 별칭끼리나 core 정의 → 다른 패키지 별칭은 얻는 게 없다)
         if deprecation is not None and new_deprecation is not None:
