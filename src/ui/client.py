@@ -7,7 +7,6 @@
 """
 
 import os
-from functools import lru_cache
 
 from .mock import run_mock
 from .optional import load
@@ -17,9 +16,25 @@ TARGET_VERSIONS = ALL_WITH_NEW               # 어느 버전으로든 (옛 버�
 GRAPH_KEYS = ("OPENAI_API_KEY", "CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
 
 
-@lru_cache(maxsize=1)
+def _secrets_to_env(keys) -> None:
+    """Streamlit Cloud 의 Secrets 에 적은 값도 환경 변수로 옮긴다 (.env 가 먼저)."""
+    try:
+        import streamlit as st
+        for k in keys:
+            if not os.environ.get(k) and k in st.secrets:
+                os.environ[k] = str(st.secrets[k])
+    except Exception:                                # secrets 파일이 없거나 형식이 틀림
+        pass
+
+
+_graph = None                                        # 성공한 그래프만 기억 (실패는 다음에 다시 시도)
+
+
 def _pipeline():
-    """그래프를 한 번만 만든다. 쓸 수 없으면 (None, 이유)."""
+    """그래프를 한 번만 만든다. 쓸 수 없으면 (None, 이유) — 키를 나중에 넣어도 다시 켜지 않고 연결된다."""
+    global _graph
+    if _graph is not None:
+        return _graph, None
     try:
         from dotenv import load_dotenv
         load_dotenv()
@@ -27,14 +42,16 @@ def _pipeline():
         pass
     if os.environ.get("MIGRATION_NO_GRAPH"):         # 자동 점검용: 그래프 없이 화면만
         return None, "그래프 끔 (MIGRATION_NO_GRAPH)"
+    _secrets_to_env(GRAPH_KEYS)
+    missing = [k for k in GRAPH_KEYS if not os.environ.get(k)]
+    if missing:                                      # 키 확인을 먼저 (그래프 코드는 불러올 때 키가 필요함)
+        return None, f".env 또는 Secrets 에 {', '.join(missing)} 없음"
     try:
         from src.graph.supervisor import migration_pipeline
+        _graph = migration_pipeline()
+        return _graph, None
     except Exception as e:                           # 그래프 코드나 패키지가 없음
         return None, f"그래프를 불러오지 못함: {type(e).__name__}: {str(e)[:120]}"
-    missing = [k for k in GRAPH_KEYS if not os.environ.get(k)]
-    if missing:
-        return None, f".env 에 {', '.join(missing)} 없음"
-    return migration_pipeline(), None
 
 
 def graph_status() -> tuple[bool, str | None]:

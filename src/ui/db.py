@@ -63,6 +63,13 @@ def _tidb_config() -> dict | None:
         load_dotenv(ROOT / ".env")
     except ImportError:
         pass
+    try:                                     # Secrets 에 .env 와 같은 이름(TIDB_HOST 등)으로 적은 경우
+        import streamlit as st
+        for k in ("TIDB_HOST", "TIDB_PORT", "TIDB_USER", "TIDB_PASSWORD", "TIDB_DATABASE"):
+            if not os.environ.get(k) and k in st.secrets:
+                os.environ[k] = str(st.secrets[k])
+    except Exception:
+        pass
     if os.environ.get("TIDB_HOST"):
         return {"host": os.environ["TIDB_HOST"], "port": os.environ.get("TIDB_PORT", 4000),
                 "user": os.environ.get("TIDB_USER", ""), "password": os.environ.get("TIDB_PASSWORD", ""),
