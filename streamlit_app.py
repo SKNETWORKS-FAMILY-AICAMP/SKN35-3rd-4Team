@@ -396,7 +396,7 @@ def chat_screen() -> None:
             if info:
                 st.caption(f":material/forum: 세션 {info['session_id'][:8]} · {info['started_at'] + KST:%m/%d %H:%M} 시작 · "
                            f"질문 {info['turns']}개 · 같은 세션에 이어서 저장 중")
-        box = st.container(height=560)
+        box = st.container(height=430)              # 대화 칸을 줄이고 입력창을 위로 · 크게 (팀 의견 10-15)
         with box:
             if not ss["messages"]:
                 with st.chat_message("assistant"):
@@ -417,7 +417,7 @@ def chat_screen() -> None:
             elif followups is not None and ss["messages"] and not followups.api_key():
                 st.caption("OpenAI 키를 설정하면 이어서 물어볼 질문이 여기에 나와요.")
             # [선택 기능: followups] 이어서 물어보기 버튼 — 끝
-        typed = st.chat_input("옛 코드나 질문을 입력하세요 (여러 줄은 Shift+Enter)")
+        typed = st.chat_input("옛 코드나 질문을 입력하세요 (여러 줄은 Shift+Enter)", height=140)
         text = typed or ss.pop("pending", None)
         if text:
             with box:
