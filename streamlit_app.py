@@ -22,6 +22,7 @@ import json
 import re
 from pathlib import Path
 import time
+import traceback
 from datetime import timedelta
 
 import streamlit as st
@@ -345,11 +346,13 @@ def handle(text: str, status=None) -> None:
             status.update(label=nxt, expanded=True)      # 제목만 바꾸면 상자가 접혀 세부 내용이 안 보임
 
     code = extract_code(text)
-    result, steps, seconds = None, [], None
+    result, steps, seconds, graph_error = None, [], None, None
     try:
         answer = ask(text, on_step)                  # 팀 그래프 (없으면 None)
     except Exception as e:                           # 그래프 실행 중 오류 → 임시 결과로 계속
         answer = None
+        graph_error = f"{type(e).__name__}: {str(e)[:300]}"
+        traceback.print_exc()                        # 실행한 터미널에 자세한 오류 (원인 찾기용)
         st.toast(f"팀 그래프 오류로 임시 결과를 보여 줘요: {type(e).__name__}", icon=":material/warning:")
     if answer is not None:
         result = answer["result"]
@@ -361,6 +364,9 @@ def handle(text: str, status=None) -> None:
         result = run(code)
         note = version_note(result) if result["verification"]["success"] else None
         reply = (note + "\n\n" if note else "") + summary(result)
+        if graph_error:                              # 답에도 원인을 남긴다 (알림은 잠깐 떴다 사라짐)
+            reply = (f"⚠ 팀 챗봇 실행 중 오류가 나서 임시 결과를 보여 드려요.\n\n`{graph_error}`\n\n"
+                     "자세한 오류는 화면을 실행한 터미널에 있어요.\n\n" + reply)
     elif followups is not None:            # [선택 기능: followups] 코드 없는 질문에 LLM 이 답함
         reply = followups.answer(text, ss["messages"][:-1])
     else:
