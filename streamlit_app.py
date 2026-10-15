@@ -44,9 +44,10 @@ APP_NAME = "LangChain 버전 마이그레이션 코드 어시스턴트"
 AUTO = "자동 감지"
 KIND_LABEL = {"native": "최신 위치", "moved": "위치 이동", "same": "그대로", "classic_fallback": "옛 창고(classic)",
               "unresolved": "못 찾음", "deprecated": "옛 메서드", "removed": "없어진 메서드", "exists": "그대로"}
-# 확인용 예제: 평가 질문 중 1.x 로 올리는 30개 (팀 그래프가 지원하는 방향)
-EXAMPLES = [q for q in json.loads((Path(__file__).parent / "eval" / "questions.json").read_text(encoding="utf-8"))
-            if q["target_version"] == "1.x" and q["type"] != "버전 오가기"]
+# 확인용 예제: 평가 질문 중 1.x 로 올리는 30개 (팀 그래프가 지원하는 방향). 파일이 없으면 예제 칸을 숨긴다
+_EXAMPLE_FILE = Path(__file__).parent / "eval" / "questions.json"
+EXAMPLES = ([q for q in json.loads(_EXAMPLE_FILE.read_text(encoding="utf-8"))
+             if q["target_version"] == "1.x" and q["type"] != "버전 오가기"] if _EXAMPLE_FILE.exists() else [])
 ORDER = ALL_WITH_NEW
 USER_ID_RULE = re.compile(r"^[0-9A-Za-z가-힣_]{2,20}$")
 
@@ -185,14 +186,15 @@ def sidebar() -> None:
     with st.sidebar:
         st.markdown(f"### {APP_NAME}")
         st.button("새 대화", icon=":material/edit_square:", width="stretch", on_click=new_chat)
-        with st.expander(f"확인용 예제 ({len(EXAMPLES)}개)", icon=":material/science:"):
-            st.selectbox("예제 고르기", [q["id"] for q in EXAMPLES], key="example_pick",
-                         format_func=lambda i: next(f"{q['id']} · {q['type']} · {q['difficulty']}" for q in EXAMPLES
-                                                    if q["id"] == i))
-            pick = next(q for q in EXAMPLES if q["id"] == ss.get("example_pick", EXAMPLES[0]["id"]))
-            st.caption(f"{pick['request']} (지금 코드 {pick['source_version']} → 1.x)")
-            st.button("이 예제 보내기", icon=":material/send:", width="stretch", type="primary",
-                      key="send_example", on_click=send_example)
+        if EXAMPLES:
+            with st.expander(f"확인용 예제 ({len(EXAMPLES)}개)", icon=":material/science:"):
+                st.selectbox("예제 고르기", [q["id"] for q in EXAMPLES], key="example_pick",
+                             format_func=lambda i: next(f"{q['id']} · {q['type']} · {q['difficulty']}" for q in EXAMPLES
+                                                        if q["id"] == i))
+                pick = next(q for q in EXAMPLES if q["id"] == ss.get("example_pick", EXAMPLES[0]["id"]))
+                st.caption(f"{pick['request']} (지금 코드 {pick['source_version']} → 1.x)")
+                st.button("이 예제 보내기", icon=":material/send:", width="stretch", type="primary",
+                          key="send_example", on_click=send_example)
         st.caption("내 대화")
         sessions = db.list_sessions(ss["user"]["user_id"])
         if not sessions:
