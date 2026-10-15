@@ -18,13 +18,12 @@
 ![비교](https://img.shields.io/badge/일반_LLM_대비-0%25→57%25-1F5FAE)
 ![자체평가](https://img.shields.io/badge/자체_평가-83.3점_B-2EA44F)
 
-[구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
+[**배포 화면**](https://langchain-migration-assistant-btn5chcr8ragnwts68rmhf.streamlit.app) · [구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
 
 </div>
 
-<!-- 데모 GIF 자리: 화면에서 확인용 예제를 보내 결과 패널이 나오는 15초 녹화를 docs/images/demo.gif 로 넣고 아래 주석을 풀어 주세요
-<p align="center"><img src="docs/images/demo.gif" width="860" alt="확인용 예제를 보내면 근거 ID가 붙은 변환 결과가 나오는 화면"></p>
--->
+<p align="center"><img src="docs/images/langchain-migration-assistant-screen.jpg" width="860" alt="확인용 예제(LLMChain → LCEL)를 보내면 검증 통과 배지와 전후 비교가 나오는 결과 화면"></p>
+<p align="center"><sub>실제 화면 (2026-10-15) · 확인용 예제를 보내면 2회차에 검증 통과, 0.0.300 ~ 0.3.30 → 1.4.5, 바뀐 줄을 빨강 · 초록으로 비교</sub></p>
 
 > **문서 근거**(import · 메서드 대응표, 최신 공식 문서 검색)로 고치고, **검사 근거**(verifier 11가지, LLM 없이)로 확인합니다.
 > 검사에 실패하면 실패 이유를 들고 근거를 다시 찾아 최대 3번 고칩니다. 바뀐 줄마다 근거 ID가 붙습니다.
