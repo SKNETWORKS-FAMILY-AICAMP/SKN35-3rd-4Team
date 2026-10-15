@@ -33,13 +33,9 @@ CODES = {
     "0.2.17 이후": "from langchain.memory import ConversationVectorStoreTokenBufferMemory\n" + COMMON,
     "흔한 코드": COMMON + "from langchain.prompts import PromptTemplate\n",
 }
-VERSION_CASES = [  # (옛 버전 선택, 코드, 기대 안내 / None 이면 안내 없음)
-    ("0.0.300", "0.0.300 전용", None), ("0.0.354", "0.0.354 전용", None), ("0.1.20", "0.1.20 이후", None),
-    ("0.2.17", "0.2.17 이후", None), ("0.3.30", "0.2.17 이후", None), ("0.3.30", "흔한 코드", None),
-    ("0.0.300", "0.2.17 이후", "고르신 버전은 0.0.300"), ("0.3.30", "0.0.300 전용", "고르신 버전은 0.3.30"),
-    (AUTO, "0.0.300 전용", "0.0.300** 시기"), (AUTO, "0.0.354 전용", "0.0.354** 시기"),
-    (AUTO, "0.1.20 이후", "0.1.20 ~ 0.3.30"), (AUTO, "0.2.17 이후", "0.2.17 ~ 0.3.30"),
-    (AUTO, "흔한 코드", "0.0.300 ~ 0.3.30"),
+VERSION_CASES = [  # (코드, 기대 안내) — 버전은 고르지 않고, 그래프가 없을 때 화면이 코드로 시기를 짐작
+    ("0.0.300 전용", "0.0.300** 시기"), ("0.0.354 전용", "0.0.354** 시기"),
+    ("0.1.20 이후", "0.1.20 ~ 0.3.30"), ("0.2.17 이후", "0.2.17 ~ 0.3.30"), ("흔한 코드", "0.0.300 ~ 0.3.30"),
 ]
 results = []
 
@@ -101,44 +97,25 @@ def main() -> int:
     sessions = [b for b in at.sidebar.button if b.key and b.key.startswith("sess_")]
     check("새 대화 → 새 세션", len(sessions) == 2, f"세션 {len(sessions)}개")
 
-    # 2. 버전 선택 × 코드
-    for pick, code_name, expect in VERSION_CASES:
+    # 2. 버전 고르기 없음 (바꿀 버전은 그래프가 질문에서 읽음)
+    at = login(app(), "봇사용자")
+    keys = {s.key for s in at.selectbox}
+    check("버전 고르기 없음", "source_pick" not in keys and "target_pick" not in keys and
+          any("질문에 적어 주세요" in c.value for c in at.caption))
+
+    # 2-1. 그래프가 없을 때: 화면이 코드로 시기를 짐작해 안내
+    for code_name, expect in VERSION_CASES:
         at = login(app(), "봇사용자")
-        at.selectbox(key="source_pick").set_value(pick).run()
         at.chat_input[0].set_value(CODES[code_name]).run()
         reply = last_reply(at)
-        if at.exception:
-            check(f"{pick} + {code_name}", False, f"오류 {at.exception}")
-        elif expect is None:
-            check(f"{pick} + {code_name}", "고르신 버전" not in reply and (pick == AUTO or "시기" not in reply), "안내 없음")
-        else:
-            check(f"{pick} + {code_name}", expect in reply, f"안내: {expect}" if expect in reply else reply[:80])
-
-    # 2-1. 버전 오가기 (변환할 버전 선택)
-    qs = {q["id"]: q for q in json.loads((ROOT / "eval" / "questions.json").read_text(encoding="utf-8"))}
-    hops = [("1.x", "0.2.17", "q31", "되돌리면서"), (AUTO, "0.3.30", "q32", "그대로 두었어요"),
-            (AUTO, "0.2.17", "q31", "LangChain 1.x** 코드로")]
-    for src, tgt, qid, expect in hops:
-        at = login(app(), "봇사용자")
-        at.selectbox(key="source_pick").set_value(src).run()
-        at.selectbox(key="target_pick").set_value(tgt).run()
-        at.chat_input[0].set_value(qs[qid]["code"]).run()
-        reply = " ".join(m.value for m in at.markdown)
-        ok = not at.exception and (expect in reply or not data)
-        check(f"버전 오가기 {src} → {tgt} ({qid})", ok, f"안내: {expect}" if expect in reply else
-              ("예시 데이터라 건너뜀" if not data else reply[-120:]))
-    at = login(app(), "봇사용자")
-    at.selectbox(key="source_pick").set_value("0.2.17").run()
-    at.selectbox(key="target_pick").set_value("0.2.17").run()
-    check("같은 버전 고르면 안내", any("버전이 같아요" in w.value for w in at.warning))
+        check(f"시기 안내 · {code_name}", not at.exception and expect in reply,
+              f"안내: {expect}" if expect in reply else reply[:80])
 
     # 2-2. 질문 36개 전부 화면에서 실행 (오류 없이 답이 나오는가)
+    qs = {q["id"]: q for q in json.loads((ROOT / "eval" / "questions.json").read_text(encoding="utf-8"))}
     failed = []
     for q in qs.values():
         at = login(app(), "봇사용자")
-        src = q["source_version"] if q["source_version"] in at.selectbox(key="source_pick").options else AUTO
-        at.selectbox(key="source_pick").set_value(src).run()
-        at.selectbox(key="target_pick").set_value(q["target_version"]).run()
         at.chat_input[0].set_value(q["request"] + "\n\n```python\n" + q["code"] + "```").run()
         if at.exception or not last_reply(at):
             failed.append(q["id"])
@@ -151,10 +128,9 @@ def main() -> int:
     at = login(app(), "봇사용자")
     at.selectbox(key="example_pick").set_value("q10").run()
     at.button(key="send_example").click().run()
-    picked = (at.selectbox(key="source_pick").value, at.selectbox(key="target_pick").value)
-    check("확인용 예제 30개 · 보내기 (예제 버전으로 맞춤)",
-          len(at.selectbox(key="example_pick").options) == 30 and picked == ("0.1.20", "1.x") and bool(last_reply(at)),
-          f"{len(at.selectbox(key='example_pick').options)}개 · {picked[0]} → {picked[1]}")
+    check("확인용 예제 30개 · 보내기",
+          not at.exception and len(at.selectbox(key="example_pick").options) == 30 and bool(last_reply(at)),
+          f"{len(at.selectbox(key='example_pick').options)}개")
 
     # 4. 코드 없는 질문 (followups 가 있으면 키 안내, 빼 두었으면 코드를 넣어 달라는 안내)
     at.chat_input[0].set_value("LCEL이 뭐야?").run()

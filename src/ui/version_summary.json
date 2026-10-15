@@ -1,7 +1,7 @@
 {
  "source": "2번 브랜치 data/processed/import_map.jsonl 요약 (2026-10-13)",
  "latest": {
-  "langchain": "1.4.4",
+  "langchain": "1.4.5",
   "langchain-core": "1.6.10"
  },
  "targets": [

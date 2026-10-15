@@ -7,12 +7,12 @@
 **옛 버전 LangChain 코드를 넣으면, 원하는 버전에서 돌아가는 코드로 고치고 근거와 검사 결과까지 보여 주는 챗봇**
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-1.4.4-1C3C3C?logo=langchain&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1.4.5-1C3C3C?logo=langchain&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.6x-FF4B4B?logo=streamlit&logoColor=white)
 ![TiDB](https://img.shields.io/badge/TiDB-Cloud-E30C34)
 ![Chroma](https://img.shields.io/badge/Chroma-Cloud-F2A33A)
-![검사](https://img.shields.io/badge/자동_점검-30%2F30-2EA44F)
+![검사](https://img.shields.io/badge/자동_점검-19%2F19-2EA44F)
 ![질문](https://img.shields.io/badge/평가_질문-36%2F36_검사-2EA44F)
 
 [구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
@@ -33,15 +33,15 @@
 | 발표 | 2026-10-15 |
 | 팀 저장소 | [SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team) |
 
-## 진행 상황 (2026-10-15 발표 기준)
+## 진행 상황 (2026-10-15 발표 당일 기준)
 
 | 구분 | 내용 | 상태 |
 |---|---|---|
 | 근거 데이터 (2번) | import 대응표 9,155줄 · 메서드 대응표 42개 · 공식 문서 295개 → 청크 11,945개 (Chroma Cloud) | ✅ 완료 |
 | 그래프 (1번) | analyzer → retriever → rewriter → verifier, 실패하면 최대 3회 다시 | ✅ 동작 |
-| 질문 분류 (1번) | migration · langchain · general로 나누는 새 입구 `supervisor()` | 🟡 연결 마무리 중 |
+| 질문 분류 (1번) | 최상위 그래프 `supervisor()`: 코드 변환(migration) · LangChain 질문(search) · 일반 질문(general) | ✅ 동작 · 화면 연결 |
 | 변환 · 검증 (3번) | rewriter(근거 ID · 이유), verifier 11가지 검사 | ✅ 동작 |
-| 화면 · DB (4번) | 로그인 · 세션 저장 · 버전 선택 · 결과 패널 · 확인용 예제 30개, TiDB 저장 | ✅ 그래프 연결, 자동 점검 30/30 |
+| 화면 · DB (4번) | 로그인 · 세션 저장 · 진행 단계 실시간 표시 · 결과 패널(전후 비교 · 변경 사항 · 근거 · 검사 결과 · 코드 받기) · 다시 시도 · 확인용 예제 30개, TiDB 저장 | ✅ 최상위 그래프 연결, 자동 점검 19/19 |
 | 평가 (4번) | 질문 36개 (1.x로 올리기 30 + 버전 오가기 6), 질문 세트 검사 36/36 | ✅ 준비 완료 |
 | 비교 실험 | 일반 LLM vs 우리 챗봇, 질문 30개 | ⏳ 결과 입력 전 |
 
@@ -69,7 +69,7 @@ from langchain.chains import LLMChain          → ModuleNotFoundError: No modul
 | 확인 | 없음 | verifier가 LLM 없이 11가지 검사 |
 | 틀렸을 때 | 모름 | 실패 이유로 근거를 다시 찾고, 틀린 근거는 빼고 다시 고침 (최대 3회) |
 | 답변 | 코드만 | 고친 코드 + 바뀐 줄마다 근거 ID · 이유 + 시도 횟수 + 설치할 패키지 |
-| 버전 | 대부분 최신으로만 | 지금 버전 → 바꿀 버전 선택 (0.0.300 ~ 1.x) |
+| 버전 | 대부분 최신으로만 | 질문에 적은 버전으로 (적지 않으면 최신 1.4.5), 옛 버전으로 되돌리기 포함 |
 
 ## 3. 시스템 구조
 
@@ -85,7 +85,7 @@ flowchart LR
 
 | 단계 | 하는 일 | 담당 |
 |---|---|---|
-| 질문 분류 | migration · langchain · general로 나눔 (연결 마무리 중) | 1번 |
+| 질문 분류 | 코드 변환(migration) · LangChain 질문(search, 문서 검색으로 답) · 일반 질문(general)으로 나눔 | 1번 |
 | ① analyzer | 질문에서 코드를 뽑고 바꿀 부분 찾기 (LLM) | 1번 |
 | ② retriever | import · 메서드 대응표 정확 매칭 + 문서 하이브리드 검색(BM25 + 벡터), 재시도 때 틀린 근거 제외 | 2번 |
 | ③ rewriter | 근거를 보고 코드 다시 쓰기, 바뀐 줄마다 근거 ID · 이유 | 3번 |
@@ -102,8 +102,10 @@ flowchart LR
 |---|---|
 | 로그인 | 아이디로 들어오기 (한글 · 영문 · 숫자 · _ 2~20자, **가입 때 중복 검사**) |
 | 사이드바 | ChatGPT처럼 새 대화 · 내 대화 목록 · **확인용 예제 30개** · 연결 상태 배지 |
-| 위쪽 | 지금 코드 버전(자동 감지) → 바꿀 버전 (0.0.300 · 0.0.354 · 0.1.20 · 0.2.17 · 0.3.30 · 1.x) |
-| 결과 패널 | 검증 배지(몇 회 만에 통과) · 전후 비교 · 바뀐 줄마다 근거 ID와 이유 · 못 바꾼 줄 · 설치할 패키지 |
+| 질문 | 코드 · 질문을 그대로 입력. 바꿀 버전은 글에 적음(예: "0.2로 되돌려 줘"), 없으면 최신 1.4.5 |
+| 진행 표시 | 기다리는 동안 "① 바꿀 부분 찾음 → ② 근거 찾음 → ③ 고침 → ④ 검사 1회차 실패 → 다시…"가 실시간으로 |
+| 결과 패널 | 배지(검증 통과 · N회, 원래 버전 → 바꾼 버전), 변환 기록, 탭: **전후 비교**(지운 줄 빨강 · 새 줄 초록) · **변경 사항**(옛 줄 → 새 줄 + 까닭) · **근거**(출처 · 경로 · 문서 링크) · **검사 결과**(11가지 통과 · 경고 · 실패) · **코드 받기**(.py · 변경 리포트 .md) |
+| 실패했을 때 | "같은 요청으로 다시 시도" 버튼 |
 
 ```mermaid
 erDiagram
@@ -125,7 +127,7 @@ erDiagram
 
 - 질문 하나와 그 답이 `chat_history` 한 행. 대화 목록은 `session_id`로 묶어서 보여 줌
 - TiDB 접속 정보가 없거나 틀리면 화면이 멈추지 않고 로컬 저장으로 넘어가며 이유를 표시
-- 1.x로 올리기는 팀 그래프를 부르고, 옛 버전으로 되돌리기는 지금 화면 쪽 임시 처리
+- 모든 질문을 팀 최상위 그래프(`supervisor`)로 보냄. 챗봇에 연결할 수 없으면 화면이 대응표로 만든 임시 결과를 보여 줌
 
 ## 5. 평가 방법
 
@@ -163,7 +165,7 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 
 - 1회차 [__]% → 최종 [__]% · **재시도 효과 +[__]%p**
 
-**화면 · 데이터 점검**: 화면 · DB 자동 점검 **30/30** · 질문 세트 검사 **36/36** · TiDB 저장 · 아이디 중복 검사 확인
+**화면 · 데이터 점검**: 화면 · DB 자동 점검 **19/19** · 질문 세트 검사 **36/36** · TiDB 저장 · 아이디 중복 검사 확인
 
 ## 7. 만들면서 발견한 것
 
@@ -176,7 +178,7 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 | 한계 | 다음 단계 |
 |---|---|
 | 11가지 코드 검사까지 하지만, 바뀐 코드의 실제 실행 결과는 확인하지 않음 | 가짜 LLM을 넣어 코드 전체 실행 테스트 |
-| 다시 쓰기는 1.x로 올리기 중심 (되돌리기는 화면 쪽 임시 처리) | 목표 버전을 그래프 전체에 넘겨 모든 방향 지원 |
+| 옛 버전으로 되돌리기는 아직 검사 통과율이 낮음, 상관없는 문서 예시를 베끼는 경우가 있음 (검사기가 '기록 없는 변경'으로 잡아냄) | 다시 쓰기 규칙 강화, 틀린 근거를 다음 시도에서 빼기, 상관없는 문서 걸러내기 |
 | 검사 · 재시도로 한 번 변환에 약 1분 | 진행 단계 표시, 쉬운 import는 대응표만으로 바로 답하기 |
 | 다시 연 대화는 질문 · 답만 (ERD에 결과 열 없음) | 필요하면 결과 열 추가를 팀과 협의 |
 | 질문 30개 · LangChain만 대상 | 실사용 코드로 확장, 다른 라이브러리로 확장 |
@@ -231,7 +233,7 @@ uv run python tools/bot_check.py
 uv run python eval/check_questions.py --py <LangChain 1.x python> --map data/processed/import_map.jsonl --symbols data/raw/symbols
 ```
 
-`bot_check.py`는 임시 SQLite로 화면을 실행해 30가지를 확인합니다(TiDB · 유료 API 사용 안 함). 마지막 줄 `30/30 통과`가 정상입니다.
+`bot_check.py`는 임시 SQLite로 화면을 실행해 19가지를 확인합니다(TiDB · 유료 API 사용 안 함). 마지막 줄 `19/19 통과`가 정상입니다.
 
 ## 10. 폴더 구조
 
@@ -242,10 +244,10 @@ uv run python eval/check_questions.py --py <LangChain 1.x python> --map data/pro
 │   ├── graph/              # 1번 · 3번: graph.py(질문 분류 입구) · supervisor.py(변환 파이프라인) · state.py · nodes/
 │   ├── prompt/             # 1번 · 3번: analyzer · rewriter · classifier 프롬프트
 │   ├── rag/                # 2번: 문서 수집 · 대응표 · 청킹 · 임베딩 · 검색
-│   └── ui/                 # 4번: client.py(그래프 호출) · db.py(TiDB) · mock.py(그래프 없을 때) · extras/
+│   └── ui/                 # 4번: client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py(그래프 없을 때)
 ├── data/                   # 2번: processed/(대응표 · 청크) · raw/(문서 · 버전별 도구 목록)
 ├── eval/                   # 4번: questions.json(36개) · build_questions.py · check_questions.py
-├── tools/bot_check.py      # 4번: 화면 · DB 자동 점검 30가지
+├── tools/bot_check.py      # 4번: 화면 · DB 자동 점검 19가지
 └── docs/                   # 4번: 화면 실행 방법 · DB 설계(ERD) · 머지 가이드 · 결과 모양
 ```
 

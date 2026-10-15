@@ -23,7 +23,7 @@ VERSION_SETS = {
     "0.1.20": ["langchain-0.1.20", "langchain-core-0.1.53", "langchain-community-0.0.38"],
     "0.2.17": ["langchain-0.2.17", "langchain-core-0.2.43", "langchain-community-0.2.19"],
     "0.3.30": ["langchain-0.3.30", "langchain-core-0.3.86", "langchain-community-0.3.31"],
-    "1.x": ["langchain-1.4.4", "langchain-core-1.6.10", "langchain-community-0.4.2", "langchain-classic-1.0.8",
+    "1.x": ["langchain-1.4.5", "langchain-core-1.6.10", "langchain-community-0.4.2", "langchain-classic-1.0.8",
             "langchain-openai-1.7.1", "langchain-text-splitters-1.1.3", "langgraph-1.2.14",
             "langchain-anthropic-1.7.6", "langchain-chroma-1.1.0", "langchain-huggingface-1.2.3",
             "langchain-google-genai-4.4.1", "langchain-ollama-1.1.0"],
