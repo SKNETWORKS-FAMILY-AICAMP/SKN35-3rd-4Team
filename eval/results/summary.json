@@ -1,0 +1,1292 @@
+{
+  "run_at": "2026-10-15 11:02:11",
+  "model": "gpt-4o-mini",
+  "compare": {
+    "upgrade": {
+      "n": 30,
+      "bot": {
+        "pass": 0.5667,
+        "run_pass": 0.8667,
+        "items": {
+          "syntax": {
+            "label": "문법",
+            "rate": 0.9667,
+            "n": 30
+          },
+          "no_legacy_import": {
+            "label": "옛 import 없음",
+            "rate": 0.9333,
+            "n": 30
+          },
+          "imports_exist": {
+            "label": "import 실제 존재",
+            "rate": 0.9,
+            "n": 30
+          },
+          "no_new_undefined": {
+            "label": "정의 안 된 이름 없음",
+            "rate": 0.9667,
+            "n": 30
+          },
+          "output_kept": {
+            "label": "결과값 보존",
+            "rate": 0.9333,
+            "n": 30
+          },
+          "no_unused_import": {
+            "label": "남은 import 없음",
+            "rate": 0.9667,
+            "n": 30
+          },
+          "expected_imports": {
+            "label": "정답 import 포함",
+            "rate": 0.6,
+            "n": 30
+          },
+          "changed": {
+            "label": "코드를 실제로 바꿈",
+            "rate": 1.0,
+            "n": 30
+          }
+        },
+        "median_sec": 11.6,
+        "legacy_methods": 2,
+        "by_difficulty": {
+          "쉬움": 1.0,
+          "어려움": 0.25,
+          "중간": 0.5333
+        },
+        "by_type": {
+          "LLMChain → LCEL": 0.6667,
+          "RAG": 0.3333,
+          "import 경로": 1.0,
+          "메모리": 0.3333,
+          "문서 로더 · 분할기": 1.0,
+          "실무 상황": 0.6667,
+          "에이전트 · 도구": 0.0,
+          "임베딩 · 벡터스토어": 0.6667,
+          "체인 조합": 0.3333,
+          "출력 파서": 0.6667
+        },
+        "verified": 0.5333,
+        "verified_and_judged": 0.6875,
+        "misrouted": [
+          "q06",
+          "q07",
+          "q09",
+          "q20",
+          "q26",
+          "q28"
+        ],
+        "flagged_failures": 8,
+        "silent_failures": 5
+      },
+      "llm": {
+        "pass": 0.0,
+        "run_pass": 0.0,
+        "items": {
+          "syntax": {
+            "label": "문법",
+            "rate": 0.9,
+            "n": 30
+          },
+          "no_legacy_import": {
+            "label": "옛 import 없음",
+            "rate": 0.0333,
+            "n": 30
+          },
+          "imports_exist": {
+            "label": "import 실제 존재",
+            "rate": 0.0333,
+            "n": 30
+          },
+          "no_new_undefined": {
+            "label": "정의 안 된 이름 없음",
+            "rate": 0.8667,
+            "n": 30
+          },
+          "output_kept": {
+            "label": "결과값 보존",
+            "rate": 0.9,
+            "n": 30
+          },
+          "no_unused_import": {
+            "label": "남은 import 없음",
+            "rate": 0.8667,
+            "n": 30
+          },
+          "expected_imports": {
+            "label": "정답 import 포함",
+            "rate": 0.0,
+            "n": 30
+          },
+          "changed": {
+            "label": "코드를 실제로 바꿈",
+            "rate": 0.9667,
+            "n": 30
+          }
+        },
+        "median_sec": 3.5,
+        "legacy_methods": 17,
+        "by_difficulty": {
+          "쉬움": 0.0,
+          "어려움": 0.0,
+          "중간": 0.0
+        },
+        "by_type": {
+          "LLMChain → LCEL": 0.0,
+          "RAG": 0.0,
+          "import 경로": 0.0,
+          "메모리": 0.0,
+          "문서 로더 · 분할기": 0.0,
+          "실무 상황": 0.0,
+          "에이전트 · 도구": 0.0,
+          "임베딩 · 벡터스토어": 0.0,
+          "체인 조합": 0.0,
+          "출력 파서": 0.0
+        }
+      },
+      "per_question": [
+        {
+          "id": "q01",
+          "type": "import 경로",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.prompts.PromptTemplate",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.PromptTemplate"
+          ],
+          "bot_sec": 19.9,
+          "llm_sec": 2.1
+        },
+        {
+          "id": "q02",
+          "type": "import 경로",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.schema.HumanMessage, langchain.schema.SystemMessage",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.schema.HumanMessage, langchain.schema.SystemMessage",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.messages.HumanMessage, langchain_core.messages.SystemMessage"
+          ],
+          "bot_sec": 17.8,
+          "llm_sec": 4.1
+        },
+        {
+          "id": "q03",
+          "type": "import 경로",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.prompts.ChatPromptTemplate",
+            "imports_exist: langchain.document.Document, langchain.prompts.ChatPromptTemplate",
+            "expected_imports: langchain_core.documents.Document, langchain_core.prompts.ChatPromptTemplate"
+          ],
+          "bot_sec": 19.8,
+          "llm_sec": 2.3
+        },
+        {
+          "id": "q04",
+          "type": "문서 로더 · 분할기",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 2,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.document_loaders.PyPDFLoader, langchain.text_splitter.RecursiveCharacterTextSplitter",
+            "imports_exist: langchain.document_loaders.PyPDFLoader, langchain.text_splitter.RecursiveCharacterTextSplitter",
+            "expected_imports: langchain_community.document_loaders.PyPDFLoader, langchain_text_splitters.RecursiveCharacterTextSplitter"
+          ],
+          "bot_sec": 14.5,
+          "llm_sec": 3.5
+        },
+        {
+          "id": "q05",
+          "type": "문서 로더 · 분할기",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.document_loaders.WebBaseLoader, langchain.text_splitter.CharacterTextSplitter",
+            "imports_exist: langchain.document_loaders.WebBaseLoader, langchain.text_splitter.CharacterTextSplitter",
+            "expected_imports: langchain_community.document_loaders.WebBaseLoader, langchain_text_splitters.CharacterTextSplitter"
+          ],
+          "bot_sec": 8.4,
+          "llm_sec": 2.8
+        },
+        {
+          "id": "q06",
+          "type": "문서 로더 · 분할기",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.document_loaders.DirectoryLoader, langchain.document_loaders.TextLoader, langchain.text_splitter.RecursiveCharacterTextSplitter",
+            "imports_exist: langchain.document_loaders.DirectoryLoader, langchain.document_loaders.TextLoader, langchain.text_splitter.RecursiveCharacterTextSplitter",
+            "expected_imports: langchain_community.document_loaders.DirectoryLoader, langchain_community.document_loaders.TextLoader, langchain_text_splitters.RecursiveCharacterTextSplitter"
+          ],
+          "bot_sec": 4.3,
+          "llm_sec": 4.9
+        },
+        {
+          "id": "q07",
+          "type": "임베딩 · 벡터스토어",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [],
+          "llm_detail": [
+            "문법 오류"
+          ],
+          "bot_sec": 3.9,
+          "llm_sec": 5.6
+        },
+        {
+          "id": "q08",
+          "type": "임베딩 · 벡터스토어",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.embeddings.OpenAIEmbeddings, langchain.vectorstores.FAISS",
+            "imports_exist: langchain.embeddings.OpenAIEmbeddings, langchain.vectorstores.FAISS",
+            "expected_imports: langchain_openai.OpenAIEmbeddings, langchain_community.vectorstores.FAISS"
+          ],
+          "bot_sec": 8.4,
+          "llm_sec": 3.1
+        },
+        {
+          "id": "q09",
+          "type": "임베딩 · 벡터스토어",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [
+            "문법 오류"
+          ],
+          "llm_detail": [
+            "문법 오류"
+          ],
+          "bot_sec": 3.6,
+          "llm_sec": 3.1
+        },
+        {
+          "id": "q10",
+          "type": "LLMChain → LCEL",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [
+            "output_kept: line 10 ['text']",
+            "expected_imports: langchain_core.output_parsers.StrOutputParser"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.prompts.ChatPromptTemplate, langchain.chains.LLMChain",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.prompts.ChatPromptTemplate, langchain.chains.LLMChain",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.ChatPromptTemplate, langchain_core.output_parsers.StrOutputParser"
+          ],
+          "bot_sec": 11.5,
+          "llm_sec": 3.4
+        },
+        {
+          "id": "q11",
+          "type": "LLMChain → LCEL",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.llms.OpenAI, langchain.chains.LLMChain, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.llms.OpenAI, langchain.chains.LLMChain, langchain.prompts.PromptTemplate",
+            "expected_imports: langchain_openai.OpenAI, langchain_core.prompts.PromptTemplate, langchain_core.output_parsers.StrOutputParser"
+          ],
+          "bot_sec": 11.7,
+          "llm_sec": 3.6
+        },
+        {
+          "id": "q12",
+          "type": "LLMChain → LCEL",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.OpenAI, langchain.chains.LLMChain, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.OpenAI, langchain.chains.LLMChain, langchain.prompts.PromptTemplate, langchain.output_parsers.JsonOutputParser",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.ChatPromptTemplate, langchain_core.output_parsers.JsonOutputParser"
+          ],
+          "bot_sec": 9.7,
+          "llm_sec": 2.6
+        },
+        {
+          "id": "q13",
+          "type": "체인 조합",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.LLMChain, langchain.chains.SequentialChain, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.LLMChain, langchain.chains.SequentialChain, langchain.prompts.PromptTemplate",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.PromptTemplate, langchain_core.output_parsers.StrOutputParser"
+          ],
+          "bot_sec": 24.8,
+          "llm_sec": 4.0
+        },
+        {
+          "id": "q14",
+          "type": "체인 조합",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain_core.runnables.RunnablePassthrough"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.LLMChain, langchain.chains.SequentialChain, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.LLMChain, langchain.chains.SequentialChain, langchain.prompts.PromptTemplate",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.PromptTemplate, langchain_core.runnables.RunnablePassthrough"
+          ],
+          "bot_sec": 28.5,
+          "llm_sec": 4.1
+        },
+        {
+          "id": "q15",
+          "type": "체인 조합",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [
+            "expected_imports: langchain_core.prompts.PromptTemplate, langchain_core.runnables.RunnableBranch"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.router.MultiPromptChain",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.router.MultiPromptChain",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.prompts.PromptTemplate, langchain_core.runnables.RunnableBranch"
+          ],
+          "bot_sec": 10.2,
+          "llm_sec": 3.1
+        },
+        {
+          "id": "q16",
+          "type": "RAG",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [
+            "expected_imports: langchain_core.prompts.ChatPromptTemplate, langchain_core.runnables.RunnablePassthrough"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.embeddings.OpenAIEmbeddings, langchain.vectorstores.FAISS, langchain.chains.RetrievalQA",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.embeddings.OpenAIEmbeddings, langchain.vectorstores.FAISS, langchain.chains.RetrievalQA",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_openai.OpenAIEmbeddings, langchain_community.vectorstores.FAISS, langchain_core.prompts.ChatPromptTemplate, langchain_core.runnables.RunnablePassthrough"
+          ],
+          "bot_sec": 9.4,
+          "llm_sec": 2.5
+        },
+        {
+          "id": "q17",
+          "type": "RAG",
+          "difficulty": "어려움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_new_undefined: qa",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_openai.OpenAIEmbeddings, langchain_community.vectorstores.FAISS"
+          ],
+          "bot_sec": 11.5,
+          "llm_sec": 6.7
+        },
+        {
+          "id": "q18",
+          "type": "RAG",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain_core.prompts.ChatPromptTemplate"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.question_answering.load_qa_chain, langchain.schema.Document",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.question_answering.load_qa_chain, langchain.schema.Document",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.documents.Document, langchain_core.prompts.ChatPromptTemplate"
+          ],
+          "bot_sec": 19.2,
+          "llm_sec": 3.8
+        },
+        {
+          "id": "q19",
+          "type": "메모리",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.ConversationChain, langchain.memory.ConversationBufferMemory",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.ConversationChain, langchain.memory.ConversationBufferMemory",
+            "expected_imports: langchain_openai.ChatOpenAI"
+          ],
+          "bot_sec": 9.9,
+          "llm_sec": 3.9
+        },
+        {
+          "id": "q20",
+          "type": "메모리",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [
+            "imports_exist: langchain.checkpoint.memory.InMemorySaver",
+            "expected_imports: langchain_core.messages.trim_messages"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.chains.ConversationChain, langchain.memory.ConversationBufferWindowMemory",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.ConversationChain, langchain.memory.ConversationBufferWindowMemory",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_core.messages.trim_messages"
+          ],
+          "bot_sec": 6.3,
+          "llm_sec": 3.1
+        },
+        {
+          "id": "q21",
+          "type": "메모리",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [
+            "expected_imports: langgraph.checkpoint.memory.InMemorySaver"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.memory.ConversationBufferMemory, langchain.chains.ConversationChain",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.memory.ConversationBufferMemory, langchain.chains.ConversationChain",
+            "expected_imports: langchain_openai.ChatOpenAI, langgraph.checkpoint.memory.InMemorySaver"
+          ],
+          "bot_sec": 9.6,
+          "llm_sec": 3.0
+        },
+        {
+          "id": "q22",
+          "type": "에이전트 · 도구",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 2,
+          "bot_detail": [
+            "expected_imports: langchain.agents.create_agent, langchain_core.tools.tool"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain.agents.Tool",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain.agents.Tool",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain.agents.create_agent, langchain_core.tools.tool"
+          ],
+          "bot_sec": 15.3,
+          "llm_sec": 2.8
+        },
+        {
+          "id": "q23",
+          "type": "에이전트 · 도구",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain.agents.create_agent"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.agents.initialize_agent, langchain.agents.AgentType",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.agents.initialize_agent, langchain.agents.AgentType, langchain.hub",
+            "no_unused_import: langchain.hub",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain.agents.create_agent, langchain_core.tools.tool"
+          ],
+          "bot_sec": 27.9,
+          "llm_sec": 4.5
+        },
+        {
+          "id": "q24",
+          "type": "에이전트 · 도구",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain.agents.create_agent, langgraph.checkpoint.memory.InMemorySaver"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain.agents.create_openai_functions_agent, langchain.memory.ConversationBufferMemory, langchain.prompts.ChatPromptTemplate",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain.agents.create_openai_functions_agent, langchain.memory.ConversationBufferMemory, langchain.prompts.ChatPromptTemplate",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain.agents.create_agent, langchain_core.tools.tool, langgraph.checkpoint.memory.InMemorySaver"
+          ],
+          "bot_sec": 28.8,
+          "llm_sec": 4.2
+        },
+        {
+          "id": "q25",
+          "type": "출력 파서",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.prompts.PromptTemplate, langchain.output_parsers.StructuredOutputParser, langchain.output_parsers.ResponseSchema",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.prompts.PromptTemplate, langchain.output_parsers.StructuredOutputParser, langchain.output_parsers.ResponseSchema",
+            "expected_imports: langchain_openai.ChatOpenAI"
+          ],
+          "bot_sec": 22.4,
+          "llm_sec": 2.8
+        },
+        {
+          "id": "q26",
+          "type": "출력 파서",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI",
+            "imports_exist: langchain.chat_models.ChatOpenAI"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.output_parsers.PydanticOutputParser, langchain.pydantic_v1.BaseModel, langchain.pydantic_v1.Field",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.output_parsers.PydanticOutputParser, langchain.pydantic_v1.BaseModel, langchain.pydantic_v1.Field",
+            "expected_imports: langchain_core.output_parsers.PydanticOutputParser"
+          ],
+          "bot_sec": 4.3,
+          "llm_sec": 5.3
+        },
+        {
+          "id": "q27",
+          "type": "출력 파서",
+          "difficulty": "쉬움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 2,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.output_parsers.CommaSeparatedListOutputParser, langchain.prompts.PromptTemplate",
+            "imports_exist: langchain.output_parsers.CommaSeparatedListOutputParser, langchain.prompts.PromptTemplate",
+            "expected_imports: langchain_core.output_parsers.CommaSeparatedListOutputParser, langchain_core.prompts.PromptTemplate"
+          ],
+          "bot_sec": 14.6,
+          "llm_sec": 3.9
+        },
+        {
+          "id": "q28",
+          "type": "실무 상황",
+          "difficulty": "중간",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 0,
+          "bot_detail": [],
+          "llm_detail": [
+            "문법 오류"
+          ],
+          "bot_sec": 4.0,
+          "llm_sec": 4.4
+        },
+        {
+          "id": "q29",
+          "type": "실무 상황",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain_core.caches.InMemoryCache, langchain_core.globals.set_llm_cache"
+          ],
+          "llm_detail": [
+            "no_legacy_import: langchain.cache.InMemoryCache, langchain.chat_models.ChatOpenAI",
+            "imports_exist: langchain.cache.InMemoryCache, langchain.chat_models.ChatOpenAI",
+            "expected_imports: langchain_core.caches.InMemoryCache, langchain_core.globals.set_llm_cache, langchain_openai.ChatOpenAI"
+          ],
+          "bot_sec": 15.7,
+          "llm_sec": 2.3
+        },
+        {
+          "id": "q30",
+          "type": "실무 상황",
+          "difficulty": "어려움",
+          "bot_pass": true,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [],
+          "llm_detail": [
+            "no_legacy_import: langchain.chat_models.ChatOpenAI, langchain.text_splitter.RecursiveCharacterTextSplitter, langchain.docstore.document.Document",
+            "imports_exist: langchain.chat_models.ChatOpenAI, langchain.chains.SummarizationChain, langchain.text_splitter.RecursiveCharacterTextSplitter, langchain.docstore.document.Document",
+            "expected_imports: langchain_openai.ChatOpenAI, langchain_text_splitters.RecursiveCharacterTextSplitter, langchain_core.documents.Document"
+          ],
+          "bot_sec": 11.8,
+          "llm_sec": 6.1
+        }
+      ]
+    },
+    "hop": {
+      "n": 6,
+      "bot": {
+        "pass": 0.0,
+        "run_pass": 0.8333,
+        "items": {
+          "syntax": {
+            "label": "문법",
+            "rate": 1.0,
+            "n": 6
+          },
+          "no_legacy_import": {
+            "label": "옛 import 없음",
+            "rate": null,
+            "n": 0
+          },
+          "imports_exist": {
+            "label": "import 실제 존재",
+            "rate": null,
+            "n": 0
+          },
+          "no_new_undefined": {
+            "label": "정의 안 된 이름 없음",
+            "rate": 0.8333,
+            "n": 6
+          },
+          "output_kept": {
+            "label": "결과값 보존",
+            "rate": 1.0,
+            "n": 6
+          },
+          "no_unused_import": {
+            "label": "남은 import 없음",
+            "rate": null,
+            "n": 0
+          },
+          "expected_imports": {
+            "label": "정답 import 포함",
+            "rate": 0.0,
+            "n": 6
+          },
+          "changed": {
+            "label": "코드를 실제로 바꿈",
+            "rate": 1.0,
+            "n": 6
+          }
+        },
+        "median_sec": 19.0,
+        "legacy_methods": 0,
+        "by_difficulty": {
+          "어려움": 0.0,
+          "중간": 0.0
+        },
+        "by_type": {
+          "버전 오가기": 0.0
+        },
+        "verified": 0.5,
+        "verified_and_judged": 0.0,
+        "misrouted": [],
+        "flagged_failures": 3,
+        "silent_failures": 3
+      },
+      "llm": {
+        "pass": 0.3333,
+        "run_pass": 1.0,
+        "items": {
+          "syntax": {
+            "label": "문법",
+            "rate": 1.0,
+            "n": 6
+          },
+          "no_legacy_import": {
+            "label": "옛 import 없음",
+            "rate": null,
+            "n": 0
+          },
+          "imports_exist": {
+            "label": "import 실제 존재",
+            "rate": null,
+            "n": 0
+          },
+          "no_new_undefined": {
+            "label": "정의 안 된 이름 없음",
+            "rate": 1.0,
+            "n": 6
+          },
+          "output_kept": {
+            "label": "결과값 보존",
+            "rate": 1.0,
+            "n": 6
+          },
+          "no_unused_import": {
+            "label": "남은 import 없음",
+            "rate": null,
+            "n": 0
+          },
+          "expected_imports": {
+            "label": "정답 import 포함",
+            "rate": 0.3333,
+            "n": 6
+          },
+          "changed": {
+            "label": "코드를 실제로 바꿈",
+            "rate": 1.0,
+            "n": 6
+          }
+        },
+        "median_sec": 3.6,
+        "legacy_methods": 2,
+        "by_difficulty": {
+          "어려움": 0.0,
+          "중간": 0.5
+        },
+        "by_type": {
+          "버전 오가기": 0.3333
+        }
+      },
+      "per_question": [
+        {
+          "id": "q31",
+          "type": "버전 오가기",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "no_new_undefined: ChatOpenAI",
+            "expected_imports: langchain.chat_models.ChatOpenAI, langchain.text_splitter.RecursiveCharacterTextSplitter"
+          ],
+          "llm_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI, langchain_core.prompts.ChatPromptTemplate, langchain_core.output_parsers.StrOutputParser"
+          ],
+          "bot_sec": 35.0,
+          "llm_sec": 2.9
+        },
+        {
+          "id": "q32",
+          "type": "버전 오가기",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": true,
+          "attempts": 2,
+          "bot_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI"
+          ],
+          "llm_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI"
+          ],
+          "bot_sec": 16.9,
+          "llm_sec": 4.0
+        },
+        {
+          "id": "q33",
+          "type": "버전 오가기",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI"
+          ],
+          "llm_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain.agents.create_tool_calling_agent, langchain_core.prompts.MessagesPlaceholder"
+          ],
+          "bot_sec": 21.2,
+          "llm_sec": 3.3
+        },
+        {
+          "id": "q34",
+          "type": "버전 오가기",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": true,
+          "bot_verified": true,
+          "attempts": 1,
+          "bot_detail": [
+            "expected_imports: langchain_core.prompts.PromptTemplate"
+          ],
+          "llm_detail": [],
+          "bot_sec": 11.0,
+          "llm_sec": 4.0
+        },
+        {
+          "id": "q35",
+          "type": "버전 오가기",
+          "difficulty": "어려움",
+          "bot_pass": false,
+          "llm_pass": false,
+          "bot_verified": false,
+          "attempts": 3,
+          "bot_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI, langchain.agents.AgentExecutor, langchain_core.prompts.MessagesPlaceholder"
+          ],
+          "llm_detail": [
+            "expected_imports: langchain_core.prompts.ChatPromptTemplate, langchain_core.prompts.MessagesPlaceholder"
+          ],
+          "bot_sec": 26.4,
+          "llm_sec": 3.0
+        },
+        {
+          "id": "q36",
+          "type": "버전 오가기",
+          "difficulty": "중간",
+          "bot_pass": false,
+          "llm_pass": true,
+          "bot_verified": true,
+          "attempts": 2,
+          "bot_detail": [
+            "expected_imports: langchain.chat_models.ChatOpenAI"
+          ],
+          "llm_detail": [],
+          "bot_sec": 15.9,
+          "llm_sec": 3.9
+        }
+      ]
+    }
+  },
+  "self_eval": {
+    "total": 83.3,
+    "grade": "B",
+    "rows": [
+      {
+        "id": "A1",
+        "area": "질문 분류",
+        "item": "코드 변환 요청을 migration으로 분류",
+        "basis": "classifier 프롬프트 · 분류 규칙 1, 2",
+        "target": 1.0,
+        "weight": 6,
+        "n": 38,
+        "ok": 32,
+        "rate": 0.8421,
+        "score": 5.1,
+        "met": false,
+        "fails": [
+          "q06",
+          "q07",
+          "q09",
+          "q20",
+          "q26",
+          "q28"
+        ]
+      },
+      {
+        "id": "A2",
+        "area": "질문 분류",
+        "item": "지식 · 일반 · 지시문 섞인 질문을 맞게 분류",
+        "basis": "classifier 프롬프트 · 분류 규칙 2~6",
+        "target": 0.9,
+        "weight": 5,
+        "n": 12,
+        "ok": 12,
+        "rate": 1.0,
+        "score": 5.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "A3",
+        "area": "질문 분류",
+        "item": "같은 질문을 3번 보내도 분류가 같음",
+        "basis": "라우터는 출력이 정확히 하나 (프롬프트 1행)",
+        "target": 1.0,
+        "weight": 4,
+        "n": 50,
+        "ok": 49,
+        "rate": 0.98,
+        "score": 3.9,
+        "met": false,
+        "fails": [
+          "q20"
+        ]
+      },
+      {
+        "id": "B1",
+        "area": "분석",
+        "item": "질문에서 코드 원문을 그대로 꺼냄",
+        "basis": "analyzer 프롬프트 · old_code 규칙",
+        "target": 0.95,
+        "weight": 5,
+        "n": 30,
+        "ok": 29,
+        "rate": 0.9667,
+        "score": 4.8,
+        "met": true,
+        "fails": [
+          "q32"
+        ]
+      },
+      {
+        "id": "B2",
+        "area": "분석",
+        "item": "질문에 적은 목표 버전을 맞게 읽음 (없으면 최신)",
+        "basis": "analyzer target_version 규칙 · 2번 normalize_version",
+        "target": 1.0,
+        "weight": 5,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 5.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "C1",
+        "area": "근거 검색",
+        "item": "근거를 1개 이상 찾음",
+        "basis": "retriever: 대응표 정확 매칭 + 하이브리드 검색",
+        "target": 1.0,
+        "weight": 4,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 4.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "C2",
+        "area": "근거 검색",
+        "item": "대응표에 있는 옛 import는 근거로 꼭 가져옴",
+        "basis": "retriever · import_lookup",
+        "target": 0.95,
+        "weight": 6,
+        "n": 81,
+        "ok": 80,
+        "rate": 0.9877,
+        "score": 5.9,
+        "met": true,
+        "fails": [
+          "q35:langchain.agents.AgentExecutor"
+        ]
+      },
+      {
+        "id": "D1",
+        "area": "고쳐 쓰기",
+        "item": "바꾼 줄마다 보여 준 근거 ID만 붙임",
+        "basis": "rewriter 원칙 2 · verifier 2번",
+        "target": 0.95,
+        "weight": 6,
+        "n": 30,
+        "ok": 26,
+        "rate": 0.8667,
+        "score": 5.2,
+        "met": false,
+        "fails": [
+          "q13",
+          "q14",
+          "q23",
+          "q24"
+        ]
+      },
+      {
+        "id": "D2",
+        "area": "고쳐 쓰기",
+        "item": "기록 없이 바뀐 줄이 없음 (환각 없음)",
+        "basis": "rewriter 원칙 1, 규칙 6 · verifier 3번",
+        "target": 0.95,
+        "weight": 6,
+        "n": 30,
+        "ok": 21,
+        "rate": 0.7,
+        "score": 4.2,
+        "met": false,
+        "fails": [
+          "q03",
+          "q13",
+          "q14",
+          "q18",
+          "q23",
+          "q24",
+          "q25",
+          "q29",
+          "q31"
+        ]
+      },
+      {
+        "id": "D3",
+        "area": "고쳐 쓰기",
+        "item": "결과값 · 출력 꺼내기 · 체인 키를 지킴",
+        "basis": "rewriter 규칙 3 · verifier 8, 10, 11번",
+        "target": 0.95,
+        "weight": 5,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 5.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "D4",
+        "area": "고쳐 쓰기",
+        "item": "새로 쓴 이름은 import도 추가",
+        "basis": "rewriter 규칙 4 · verifier 9번",
+        "target": 0.95,
+        "weight": 4,
+        "n": 30,
+        "ok": 29,
+        "rate": 0.9667,
+        "score": 3.9,
+        "met": true,
+        "fails": [
+          "q31"
+        ]
+      },
+      {
+        "id": "D5",
+        "area": "고쳐 쓰기",
+        "item": "안 쓰게 된 import는 지움",
+        "basis": "rewriter 규칙 5 · verifier 7번",
+        "target": 0.95,
+        "weight": 4,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 4.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "E1",
+        "area": "검증 · 재시도",
+        "item": "최종 검증 통과",
+        "basis": "verifier 11가지 · 최대 3회",
+        "target": 0.8,
+        "weight": 10,
+        "n": 30,
+        "ok": 19,
+        "rate": 0.6333,
+        "score": 6.3,
+        "met": false,
+        "fails": [
+          "q03",
+          "q13",
+          "q14",
+          "q18",
+          "q23",
+          "q24",
+          "q25",
+          "q29",
+          "q31",
+          "q33",
+          "q35"
+        ]
+      },
+      {
+        "id": "E2",
+        "area": "검증 · 재시도",
+        "item": "1회차에 검증 통과",
+        "basis": "-",
+        "target": 0.6,
+        "weight": 5,
+        "n": 30,
+        "ok": 14,
+        "rate": 0.4667,
+        "score": 2.3,
+        "met": false,
+        "fails": [
+          "q03",
+          "q04",
+          "q13",
+          "q14",
+          "q18",
+          "q22",
+          "q23",
+          "q24",
+          "q25",
+          "q27",
+          "q29",
+          "q31",
+          "q32",
+          "q33",
+          "q35",
+          "q36"
+        ]
+      },
+      {
+        "id": "E3",
+        "area": "검증 · 재시도",
+        "item": "1회차 실패 → 다시 시도해서 통과",
+        "basis": "실패 이유 피드백 + 틀린 근거 제외",
+        "target": 0.5,
+        "weight": 5,
+        "n": 16,
+        "ok": 5,
+        "rate": 0.3125,
+        "score": 1.6,
+        "met": false,
+        "fails": [
+          "q03",
+          "q13",
+          "q14",
+          "q18",
+          "q23",
+          "q24",
+          "q25",
+          "q29",
+          "q31",
+          "q33",
+          "q35"
+        ]
+      },
+      {
+        "id": "E4",
+        "area": "검증 · 재시도",
+        "item": "검증 시도가 최대 3회를 넘지 않음",
+        "basis": "MAX_ATTEMPTS = 3",
+        "target": 1.0,
+        "weight": 3,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 3.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "E5",
+        "area": "검증 · 재시도",
+        "item": "검증 통과한 코드는 공통 채점도 통과",
+        "basis": "검사기 신뢰도",
+        "target": 1.0,
+        "weight": 7,
+        "n": 19,
+        "ok": 11,
+        "rate": 0.5789,
+        "score": 4.1,
+        "met": false,
+        "fails": [
+          "q10",
+          "q15",
+          "q16",
+          "q21",
+          "q22",
+          "q32",
+          "q34",
+          "q36"
+        ]
+      },
+      {
+        "id": "F1",
+        "area": "답변 규칙",
+        "item": "LangChain 질문 답에 '출처' 표기",
+        "basis": "search 프롬프트 · 답변 형식",
+        "target": 0.9,
+        "weight": 3,
+        "n": 5,
+        "ok": 5,
+        "rate": 1.0,
+        "score": 3.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "F2",
+        "area": "답변 규칙",
+        "item": "한국어로 답함",
+        "basis": "search · general 프롬프트",
+        "target": 1.0,
+        "weight": 2,
+        "n": 12,
+        "ok": 12,
+        "rate": 1.0,
+        "score": 2.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "G1",
+        "area": "안정성 · 속도",
+        "item": "오류 없이 답을 돌려줌",
+        "basis": "-",
+        "target": 1.0,
+        "weight": 3,
+        "n": 50,
+        "ok": 50,
+        "rate": 1.0,
+        "score": 3.0,
+        "met": true,
+        "fails": []
+      },
+      {
+        "id": "G2",
+        "area": "안정성 · 속도",
+        "item": "코드 변환 60초 안에 끝남",
+        "basis": "화면 기다림 한도 (4번)",
+        "target": 0.9,
+        "weight": 2,
+        "n": 30,
+        "ok": 30,
+        "rate": 1.0,
+        "score": 2.0,
+        "met": true,
+        "fails": []
+      }
+    ],
+    "met": 13,
+    "items": 21
+  },
+  "attempt_curve": {
+    "1": 0.4333,
+    "2": 0.5333,
+    "3": 0.5333
+  }
+}
