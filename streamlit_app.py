@@ -39,9 +39,10 @@ KST = timedelta(hours=9)  # DB 시각은 UTC 로 저장, 화면에는 한국 시
 followups = load("followups")            # [선택 기능] 없으면 None
 version_detect = load("version_detect")  # [선택 기능] 없으면 None
 
-st.set_page_config(page_title="LangChain 마이그레이션 어시스턴트", page_icon=":material/sync_alt:", layout="wide")
+st.set_page_config(page_title="Langration · LangChain 마이그레이션 어시스턴트", page_icon=":material/sync_alt:", layout="wide")
 
-APP_NAME = "LangChain 버전 마이그레이션 코드 어시스턴트"
+APP_NAME = "Langration"
+APP_DESC = "LangChain 버전 마이그레이션 코드 어시스턴트"   # 이름 아래 작은 글씨
 AUTO = "자동 감지"
 KIND_LABEL = {"native": "최신 위치", "moved": "위치 이동", "same": "그대로", "classic_fallback": "옛 창고(classic)",
               "unresolved": "못 찾음", "deprecated": "옛 메서드", "removed": "없어진 메서드", "exists": "그대로"}
@@ -153,6 +154,7 @@ def login_screen() -> None:
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
         st.title(APP_NAME)
+        st.caption(APP_DESC)
         st.caption("옛 LangChain 코드를 최신 버전으로 고치고, 근거와 검증 결과를 함께 보여 줍니다.")
         first, again = st.tabs(["처음이에요", "이어서 하기"])
         with first:
@@ -186,6 +188,7 @@ def login_screen() -> None:
 def sidebar() -> None:
     with st.sidebar:
         st.markdown(f"### {APP_NAME}")
+        st.caption(APP_DESC)
         st.button("새 대화", icon=":material/edit_square:", width="stretch", on_click=new_chat)
         if EXAMPLES:
             with st.expander(f"확인용 예제 ({len(EXAMPLES)}개)", icon=":material/science:"):
@@ -380,6 +383,7 @@ def handle(text: str, status=None) -> None:
 
 def chat_screen() -> None:
     st.markdown(f"#### {APP_NAME}")
+    st.caption(APP_DESC)
     st.caption(f"바꿀 버전은 질문에 적어 주세요 (예: \"0.2로 되돌려 줘\"). 적지 않으면 최신 LangChain {LATEST['langchain']}로 바꿔요.")
 
     chat_col, result_col = st.columns([1, 1.25], gap="large")
