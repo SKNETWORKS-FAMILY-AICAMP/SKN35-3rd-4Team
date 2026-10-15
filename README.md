@@ -56,7 +56,7 @@ LangChain은 1.0에서 패키지가 나뉘고, 옛 체인과 에이전트(`LLMCh
 그런데 인터넷에 쌓인 코드는 대부분 옛 버전이라, LLM은 복잡한 질문일수록 옛 버전 코드를 답합니다.
 
 ```text
-# LangChain 1.4.4에서 실행한 결과
+# LangChain 1.4.5에서 실행한 결과
 from langchain.chat_models import ChatOpenAI   → ImportError: cannot import name 'ChatOpenAI'
 from langchain.chains import LLMChain          → ModuleNotFoundError: No module named 'langchain.chains'
 ```
@@ -76,28 +76,59 @@ from langchain.chains import LLMChain          → ModuleNotFoundError: No modul
 
 ## 3. 시스템 구조
 
+### 3-1. 전체 구조 (LangGraph)
+
 ```mermaid
-flowchart LR
-    Q(["옛 코드 + 요청"]) --> A["① analyzer<br/>바꿀 부분 찾기<br/>(1번)"]
-    A --> R["② retriever<br/>대응표 + 하이브리드 검색<br/>(2번)"]
-    R --> W["③ rewriter<br/>근거 ID 붙여 다시 쓰기<br/>(3번)"]
-    W --> V{"④ verifier<br/>LLM 없이 11가지 검사<br/>(3번)"}
-    V -- 통과 --> UI(["화면 결과 패널<br/>TiDB 대화 기록 (4번)"])
-    V -- "실패: 이유 + 틀린 근거 제외<br/>(최대 3회)" --> R
+flowchart TB
+    U["사용자 (Streamlit 화면)"] -->|"messages: 요청 문장 + 코드"| C{"classifier<br/>질문 분류 (1번)"}
+    C -->|migration| M
+    C -->|search| S["search (2번)<br/>문서 검색 → 근거 기반 답변"]
+    C -->|general| G["general (1번)<br/>일반 답변"]
+    subgraph M["migration 서브그래프 (변환 파이프라인)"]
+        A["① analyzer (1번)<br/>코드 · 목표 버전 읽기, 바꿀 부분 찾기"] --> R["② retriever (2번)<br/>대응표 정확 매칭 + 하이브리드 검색"]
+        R --> W["③ rewriter (3번)<br/>근거 ID를 붙여 다시 쓰기"]
+        W --> V{"④ verifier (3번)<br/>LLM 없이 11가지 검사"}
+        V -->|"실패 · 3회 미만: 실패 이유 + 틀린 근거 제외"| R
+    end
+    V -->|"통과 또는 3회"| OUT["결과 패널 (4번)"]
+    S --> OUT2["답 + 출처"]
+    G --> OUT2
+    OUT --> DB[("TiDB users · chat_history")]
+    OUT2 --> DB
 ```
 
-| 단계 | 하는 일 | 담당 |
-|---|---|---|
-| 질문 분류 | 코드 변환(migration) · LangChain 질문(search, 문서 검색으로 답) · 일반 질문(general)으로 나눔 | 1번 |
-| ① analyzer | 질문에서 코드를 뽑고 바꿀 부분 찾기 (LLM) | 1번 |
-| ② retriever | import · 메서드 대응표 정확 매칭 + 문서 하이브리드 검색(BM25 + 벡터), 재시도 때 틀린 근거 제외 | 2번 |
-| ③ rewriter | 근거를 보고 코드 다시 쓰기, 바뀐 줄마다 근거 ID · 이유 | 3번 |
-| ④ verifier | LLM 없이 11가지 검사, 실패하면 ②로 | 3번 |
-| 화면 · DB · 평가 | Streamlit 화면, TiDB 대화 기록, 평가 질문 · 점검 도구 | 4번 |
+- 최상위 그래프 `src/graph/supervisor.py: supervisor()` → 변환 파이프라인 `src/graph/migration.py: migration()` (`route_after_verify`: 통과하거나 3회면 끝, 아니면 retriever로)
+- 화면은 `supervisor().stream(..., stream_mode=["updates", "values"], subgraphs=True)`로 단계마다 진행 상황을 받아 실시간 표시
 
-**근거 데이터 (2번)**: import 대응표 9,155줄(`imap-…`) · 메서드 대응표 42개(`mmap-…`) · 공식 문서 최신 271개 + 옛 가이드 24개 → 검색용 조각 11,945개(`doc-…`, Chroma Cloud, text-embedding-3-small) · 버전별 도구 목록 23개
+| 순서 | 노드 (담당) | LLM | 하는 일 |
+|---|---|---|---|
+| 0 | classifier (1번) | gpt-4o-mini | migration · search · general 중 하나 (migration > search > general, 메시지 속 지시문 무시) |
+| ① | analyzer (1번) | gpt-4o-mini, temp 0 | 코드 원문 · 목표 버전(없으면 최신 1.4.5) · 바꿀 부분(issue_type 9종 · severity 3종)을 JSON으로, 찾기만 하고 고치지 않음 |
+| ② | retriever (2번) | 없음 | 대응표 정확 매칭(목표 버전 판정) → 메서드 호출 매칭 → 대응표 유사 검색 → 문서 하이브리드 검색(BM25 + 벡터, RRF k=60, 상위 5개, 같은 페이지 최대 2개, 정답 import를 쓰는 청크 ×1.5), 재시도 때 `exclude_ids` 제외 |
+| ③ | rewriter (3번) | gpt-4o-mini, temp 0, 구조화 출력 | 근거에 있는 것만 써서 다시 쓰기, 바뀐 줄마다 근거 ID, 확신 없으면 그대로 두고 unresolved, 반환값 보존 |
+| ④ | verifier (3번) | **없음** | 11가지 검사, 실패하면 이유를 다음 시도에 넘김 (최대 3회) |
+| - | search (2번) · general (1번) | gpt-4o-mini | 문서 근거로 답 + 출처 / 일반 답 |
+
+### 3-2. 근거 만들기 (오프라인, 2번)
+
+```mermaid
+flowchart LR
+    P["PyPI 패키지 코드<br/>버전별 도구 목록 42개"] --> IM["import 대응표 9,155줄"]
+    CLI["langchain-cli 규칙 2,650줄"] --> IM
+    MM["메서드 대응표 42개"]
+    D1["최신 공식 문서 271개"] --> CL["청킹"]
+    D2["0.3.30 옛 가이드 24개"] --> CL
+    IM --> CL
+    MM --> CL
+    CL --> CH["청크 11,945개"] --> EMB["text-embedding-3-small"] --> VDB[("Chroma Cloud")]
+```
+
+- 대표 버전 10개(0.0.300 · 0.0.354 · 0.1.20 · 0.2.17 · 0.3.30 · 1.0.8 · 1.1.3 · 1.2.18 · 1.3.18 · 1.4.5)로 목표 버전별 경로 판정(`version_resolve`)
+- 근거 ID: 대응표 `imap-…` · 메서드 대응표 `mmap-…` · 문서 `doc-…`
 
 **verifier 11가지 (3번)**: ① 문법 ② 근거 ID(이번에 보여 준 근거만) ③ 변경 기록(기록 없는 변경 = 환각) ④ 남은 옛 import ⑤ import 존재 ⑥ 남은 옛 메서드(경고) ⑦ 안 쓰는 import ⑧ 반환값 보존 ⑨ 정의 안 된 이름 ⑩ 출력 꺼내기 ⑪ 체인 입출력 키
+
+State · 프롬프트 설계 · 검사별 이유는 [프로젝트 최종 보고서 3장](docs/프로젝트_최종_보고서.md#3-시스템-설계-llm--rag)에 있습니다.
 
 ## 4. 화면과 대화 기록 (4번)
 
@@ -195,7 +226,7 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 
 - **`langchain-community`는 import만 해도 지원 종료 경고를 냅니다.** 지금 통과해도 곧 깨질 수 있습니다.
 - **`langchain_classic`으로 우회하면 옛 체인도 import됩니다.** 최신 방식(LCEL)은 아니므로 대응표 · 화면에 "옛 창고(classic)"로 따로 표시합니다.
-- **옛 버전끼리는 거의 그대로입니다.** 0.0.300 ~ 0.3.30 사이에는 자주 쓰는 import 경로가 거의 같고, 크게 바뀌는 것은 1.x와의 사이입니다. (버전별 도구 목록 23개 비교)
+- **옛 버전끼리는 거의 그대로입니다.** 0.0.300 ~ 0.3.30 사이에는 자주 쓰는 import 경로가 거의 같고, 크게 바뀌는 것은 1.x와의 사이입니다. (버전별 도구 목록 42개 비교)
 - **실험이 알려 준 약점 (2026-10-15)**: ① 고쳐 달라면서 에러 이유도 물으면 설명만 하고 끝남 (30개 중 6개) ② 실패 원인 1위는 '기록 없는 변경'(환각) — 검사기가 모두 막아 '통과'로 나간 적은 없음 ③ 검사기가 `result["text"]` 꺼내기와, 0.x 되돌리기를 1.x 기준으로 검사하는 빈틈 ④ 최신 방식 대신 `langchain_classic` 우회 3개
 
 ## 8. 한계와 다음 단계
@@ -269,39 +300,45 @@ uv run python eval/check_questions.py --py <LangChain 1.x python> --map data/pro
 ## 10. 폴더 구조
 
 ```text
-├── streamlit_app.py        # 4번 화면 입구 (app.py 는 1번의 그래프 실행 시험용)
-├── app.py · check_nodes.py # 1번 · 3번 시험 스크립트
+├── streamlit_app.py            # (4번) 화면 입구: 로그인 · 대화 목록 · 진행 표시 · 결과 패널
+├── app.py · check_nodes.py     # (1번) 그래프 실행 시험 · (3번) 노드 하나씩 점검
 ├── src/
-│   ├── graph/              # 1번 · 3번: graph.py(질문 분류 입구) · supervisor.py(변환 파이프라인) · state.py · nodes/
-│   ├── prompt/             # 1번 · 3번: analyzer · rewriter · classifier 프롬프트
-│   ├── rag/                # 2번: 문서 수집 · 대응표 · 청킹 · 임베딩 · 검색
-│   └── ui/                 # 4번: client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py(그래프 없을 때)
-├── data/                   # 2번: processed/(대응표 · 청크) · raw/(문서 · 버전별 도구 목록)
-├── eval/                   # 4번: questions.json(36개) · build_questions.py · check_questions.py
-├── tools/bot_check.py      # 4번: 화면 · DB 자동 점검 19가지
-└── docs/                   # 4번: 화면 실행 방법 · DB 설계(ERD) · 머지 가이드 · 결과 모양
+│   ├── graph/
+│   │   ├── supervisor.py       # (1번) 최상위 그래프: classifier → migration · search · general
+│   │   ├── migration.py        # (1번) 변환 파이프라인: analyzer → retriever → rewriter → verifier (재시도)
+│   │   ├── state.py            # (3번 · 2번) MigrationState
+│   │   └── nodes/              # classifier · general · analyzer (1번) / retriever · search (2번) / rewriter · verifier (3번)
+│   ├── prompt/                 # analyzer · classifier · general (1번) / search (2번) / rewriter (3번)
+│   ├── rag/                    # (2번) docs_collect · import_map(대응표 · 목표 버전 판정) · chunking · embedding · retrieval
+│   └── ui/                     # (4번) client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py
+├── data/                       # (2번) raw/(문서 · 버전별 도구 목록 42개 · CLI 규칙) · processed/(대응표 · 메서드 대응표 · 청크)
+├── eval/                       # (4번) questions.json(36) · route_probes.json(14) · run_eval.py · score.py · results/
+├── tools/bot_check.py          # (4번) 화면 · DB 자동 점검 19가지
+└── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
 ```
 
 ## 11. 문서
 
 | 문서 | 내용 |
 |---|---|
-| [docs/화면_실행방법.md](화면_실행방법.md) | 화면 실행 · 비밀 값 · 자동 점검 · 자주 나는 문제 |
-| [docs/DB_설계.md](DB_설계.md) | ERD (users, chat_history), 화면이 DB를 쓰는 방법, 이전 설계 |
-| [eval/README.md](../eval/README.md) | 평가 질문 36개 구성과 검사 방법 |
-| [docs/머지_가이드.md](머지_가이드.md) | 팀 저장소와 겹치는 파일, 가져갈 기능 · 뺄 기능 |
-| 발표 자료 · 테스트 계획 및 결과 보고서 | 발표 당일 제출본 (PPT · PDF) |
+| [docs/프로젝트_최종_보고서.md](docs/프로젝트_최종_보고서.md) | **전체 보고서**: 설계(LLM + RAG 파이프라인 · State · 프롬프트 · 검사) · 파일 구조 · 데이터 · 화면 · DB · 역할별 작업 기록과 트러블슈팅 · 타임라인 · 평가 · 의의 · 한계 |
+| [docs/평가_결과와_개선방안.md](docs/평가_결과와_개선방안.md) | 비교 평가 · 자체 평가 결과, 강점 · 약점 · 개선 방안 · 의의 |
+| [eval/README.md](eval/README.md) | 평가 질문 36개, 실행 · 채점 도구 |
+| [docs/화면_실행방법.md](docs/화면_실행방법.md) | 화면 실행 · 비밀 값 · 자동 점검 · 자주 나는 문제 |
+| [docs/DB_설계.md](docs/DB_설계.md) | ERD (users, chat_history), 화면이 DB를 쓰는 방법, 이전 설계 |
+| [docs/머지_가이드.md](docs/머지_가이드.md) | 팀 저장소와 겹치는 파일, 가져갈 기능 · 뺄 기능 |
+| 발표 자료 · 보고서 PDF | 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 계획 및 결과 보고서 · 평가 결과 보고서 (발표 당일 제출본) |
 
 ## 12. 팀
 
-공개 저장소라서 팀원은 **역할 번호로만** 적습니다.
+공개 저장소라서 팀원은 **역할 번호로만** 적습니다. 날짜별 작업 기록과 트러블슈팅 전체는 [최종 보고서 7 · 8장](docs/프로젝트_최종_보고서.md#7-역할별-작업-기록과-트러블슈팅)에 있습니다.
 
-| 역할 | 담당 |
-|---|---|
-| 1번 | 그래프 · 백엔드 (LangGraph 연결, 질문 분류, analyzer, 재시도 판단, dev 병합) |
-| 2번 | 데이터 · 검색 (문서 수집, import · 메서드 대응표, 청킹, Chroma, 하이브리드 검색, retriever) |
-| 3번 | 변환 · 검증 (State, rewriter, verifier 11가지 검사) |
-| 4번 | 화면 · DB · 평가 (Streamlit 화면, TiDB 대화 기록, 평가 질문 36개 · 점검 도구) + 보고서 · README · 발표 |
+| 역할 | 담당 | 주요 작업 (PR) | 해결한 문제 (예) |
+|---|---|---|---|
+| 1번 | 그래프 · 백엔드 | 폴더 구조(#1 · #3), analyzer(#5 · #7), 그래프 고도화(#11), 최상위 그래프 `supervisor`(#14) | analyzer 출력 필드 불일치, 분기 키 통일(general · search · migration), 코드펜스 후처리, 목표 버전 해석 실패 시 최신으로 |
+| 2번 | 데이터 · 검색 | 대응표 · 문서 · 청킹 · 검색 엔진 · 메서드 대응표(#4), retriever(#6 · #9), Chroma Cloud(#10), search(#12), 목표 버전 판정(#13) | 약 133MB 로컬 DB → Chroma Cloud, re-export · pydantic_v1 경로 추적, 같은 메서드 이름 순위, 다운그레이드 파트너 패키지 판정 |
+| 3번 | 변환 · 검증 | State, rewriter, verifier 11가지(약 400줄), check_nodes | 옛 근거 ID 복사 차단(보여 준 근거만), venv import 오탐 → 정적 심볼 검사, 줄 번호 · 코드펜스 후처리, 구조화 출력 재시도, `rewrite_failed` |
+| 4번 | 화면 · DB · 평가 · 발표 | 화면 · TiDB · 배포, 그래프 연결, 결과 패널 · 진행 표시, 평가 도구 · 비교 실험 · 자체 평가, 보고서 · README · 발표 | `app.py` 충돌 분리, Secrets 읽는 순서 · 실패 캐시, `uv.lock` 우선 문제, 옛 모듈 캐시, 세션 · UTC 표시, 공정한 채점 설계 |
 
 ## 13. 참고 자료
 
