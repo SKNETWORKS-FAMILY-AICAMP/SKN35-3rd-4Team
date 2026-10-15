@@ -18,7 +18,7 @@
 ![비교](https://img.shields.io/badge/일반_LLM_대비-0%25→57%25-1F5FAE)
 ![자체평가](https://img.shields.io/badge/자체_평가-83.3점_B-2EA44F)
 
-[**배포 화면**](https://langchain-migration-assistant-btn5chcr8ragnwts68rmhf.streamlit.app) · [구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
+[**배포 화면**](https://langchain-migration-assistant-btn5chcr8ragnwts68rmhf.streamlit.app) · [구조](#3-시스템-구조) · [화면 · DB](#4-화면과-대화-기록-4번) · [평가](#5-평가-방법) · [결과](#6-결과) · [실행](#9-실행-방법) · [**발표자료**](발표자료/) · [배포 저장소](https://github.com/SKN35shimsungwook/langchain-migration-assistant)
 
 </div>
 
@@ -314,7 +314,8 @@ uv run python eval/check_questions.py --py <LangChain 1.x python> --map data/pro
 ├── data/                       # (2번) raw/(문서 · 버전별 도구 목록 42개 · CLI 규칙) · processed/(대응표 · 메서드 대응표 · 청크)
 ├── eval/                       # (4번) questions.json(36) · route_probes.json(14) · run_eval.py · score.py · results/
 ├── tools/bot_check.py          # (4번) 화면 · DB 자동 점검 19가지
-└── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
+├── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
+└── 발표자료/                   # 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 · 평가 보고서 · 화면 캡처 · 이전버전/
 ```
 
 ## 11. 문서
@@ -327,7 +328,13 @@ uv run python eval/check_questions.py --py <LangChain 1.x python> --map data/pro
 | [docs/화면_실행방법.md](docs/화면_실행방법.md) | 화면 실행 · 비밀 값 · 자동 점검 · 자주 나는 문제 |
 | [docs/DB_설계.md](docs/DB_설계.md) | ERD (users, chat_history), 화면이 DB를 쓰는 방법, 이전 설계 |
 | [docs/머지_가이드.md](docs/머지_가이드.md) | 팀 저장소와 겹치는 파일, 가져갈 기능 · 뺄 기능 |
-| 발표 자료 · 보고서 PDF | 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 계획 및 결과 보고서 · 평가 결과 보고서 (발표 당일 제출본) |
+| [발표자료/](발표자료/) | **발표 당일 제출본 폴더** (이전 버전은 [발표자료/이전버전/](발표자료/이전버전/)) |
+| [프로젝트 최종 보고서 (PDF)](발표자료/프로젝트_최종_보고서.pdf) · [Word](발표자료/프로젝트_최종_보고서.docx) | 전체 보고서 제출본 |
+| [발표 PPT](발표자료/LangChain_마이그레이션_도우미_발표.pptx) · [PDF](발표자료/LangChain_마이그레이션_도우미_발표.pdf) | 본편 19장 + 질문 대응용 부록 3장 |
+| [발표 대본 (Word)](발표자료/발표_대본.docx) · [PDF](발표자료/발표_대본.pdf) | 장마다 훅 · 설명 · 넘기는 말, 예상 질문과 답 |
+| [테스트 계획 및 결과 보고서](발표자료/테스트_계획_및_결과_보고서.pdf) · [평가 결과 보고서](발표자료/평가_결과_보고서.pdf) | 부속 보고서 (테스트 · 비교 평가 · 자체 평가) |
+| [화면 캡처](발표자료/LangChain_마이그레이션_도우미_화면.jpg) | 실제 화면 (2026-10-15) |
+| [발표자료/PLAN_10-15_업데이트.md](발표자료/PLAN_10-15_업데이트.md) | 역할 분담 계획서 · 진행 상황 (10-15) |
 
 ## 12. 팀
 
