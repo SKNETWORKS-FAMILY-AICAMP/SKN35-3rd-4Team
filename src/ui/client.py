@@ -144,62 +144,136 @@ def _last_ai_text(state: dict) -> str:
 KIND_NAME = {"migration": "코드 변환 요청", "search": "LangChain 질문", "general": "일반 질문"}
 
 
-def _step_message(node: str, upd: dict) -> tuple[str, str]:
-    """끝난 단계 → (끝난 일 한 줄, 다음에 할 일). 그래프 노드 이름은 1 · 2 · 3번 그래프 그대로."""
+ISSUE_NAME = {"import_path_moved": "import 경로 이동", "symbol_renamed": "이름 바뀜", "symbol_removed": "없어짐",
+              "api_replaced": "다른 방식으로 대체", "signature_changed": "인자 바뀜", "behavior_changed": "동작 · 반환값 바뀜",
+              "deprecated": "폐기 예정", "dependency_split": "패키지 분리", "other": "기타"}
+SOURCE_NAME = {"import_map": "import 대응표", "method_map": "메서드 대응표", "latest_docs": "최신 문서",
+               "migration_guide": "옛 가이드"}
+MAX_DETAIL = 5   # 단계마다 보여 줄 세부 줄 수
+
+
+def _short(text, n: int = 70) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def _error_names(errors: list[dict]) -> list[str]:
+    """검사 오류 → '검사 이름 ×개수' (결과 패널의 검사 결과 탭과 같은 이름)."""
+    from collections import Counter
+    from src.ui.result_view import CHECKS
+    name_of = {t: name for name, _, types in CHECKS for t in types}
+    counts = Counter(name_of.get(e.get("type"), e.get("type") or "기타") for e in errors)
+    return [f"{name} ×{c}" if c > 1 else name for name, c in counts.most_common()]
+
+
+def _step_message(node: str, upd: dict) -> tuple[str, str, list[str]]:
+    """끝난 단계 → (끝난 일 한 줄, 다음에 할 일, 세부 내용 줄들). 그래프 노드 이름은 1 · 2 · 3번 그래프 그대로."""
     upd = upd if isinstance(upd, dict) else {}
     if node == "classifier":
         kind = upd.get("classification", "")
         nxt = {"migration": "① 바꿀 부분 찾는 중", "search": "문서에서 답 찾는 중"}.get(kind, "답 쓰는 중")
-        return f"질문 종류: {KIND_NAME.get(kind, kind)}", nxt
+        why = {"migration": "코드와 바꿔 달라는 요청이 있어 변환 파이프라인으로 보냄",
+               "search": "버전 변화를 묻는 질문이라 문서 검색으로 답함",
+               "general": "LangChain 버전 변화와 관계없는 질문이라 일반 답변"}.get(kind)
+        return f"질문 종류: {KIND_NAME.get(kind, kind)}", nxt, [why] if why else []
     if node == "analyzer":
         a = upd.get("analysis") if isinstance(upd.get("analysis"), dict) else {}
-        n = len(a.get("issues") or [])
+        issues = a.get("issues") or []
         tv = upd.get("target_version")
-        return f"① 바꿀 부분 {n}곳 찾음" + (f" · 목표 LangChain {tv}" if tv else ""), "② 근거 찾는 중"
+        details = []
+        for i in issues[:MAX_DETAIL]:
+            line = i.get("line_start") or i.get("line")
+            what = ISSUE_NAME.get(i.get("issue_type"), i.get("issue_type") or "")
+            details.append(f"{line}줄 `{_short(i.get('symbol') or i.get('code'), 50)}` · {what}"
+                           + (f" — {_short(i.get('what_changed'), 60)}" if i.get("what_changed") else ""))
+        if len(issues) > MAX_DETAIL:
+            details.append(f"외 {len(issues) - MAX_DETAIL}곳")
+        return (f"① 바꿀 부분 {len(issues)}곳 찾음" + (f" · 목표 LangChain {tv}" if tv else ""),
+                "② 근거 찾는 중", details)
     if node == "retriever":
-        return f"② 근거 {len(upd.get('evidences') or [])}개 찾음", "③ 코드 고치는 중"
+        evs = upd.get("evidences") or []
+        from collections import Counter
+        by_src = Counter(SOURCE_NAME.get(e.get("source"), e.get("source")) for e in evs)
+        details = [" · ".join(f"{k} {v}개" for k, v in by_src.items())] if evs else []
+        for e in [e for e in evs if e.get("source") == "import_map" and e.get("old")][:3]:
+            details.append(f"`{_short(e['old'], 45)}` → `{_short(e.get('new') or '1.x 경로 없음', 45)}`")
+        for e in [e for e in evs if e.get("source") in ("latest_docs", "migration_guide")][:2]:
+            details.append(f"문서: {_short(e.get('title') or e.get('section') or e.get('evidence_id'), 60)}")
+        return f"② 근거 {len(evs)}개 찾음", "③ 코드 고치는 중", details
     if node == "rewriter":
-        return f"③ {len(upd.get('changes') or [])}곳 고침", "④ 검사하는 중"
+        changes, unresolved = upd.get("changes") or [], upd.get("unresolved") or []
+        details = []
+        for c in changes[:MAX_DETAIL]:
+            old, new = (c.get("old") or "").strip(), (c.get("new") or "").strip()
+            where = f"{c['old_line']}줄" if c.get("old_line") else "새 줄"
+            if old and new:
+                details.append(f"{where}: `{_short(old, 45)}` → `{_short(new, 45)}`")
+            elif new:
+                details.append(f"{where} 추가: `{_short(new, 60)}`")
+            else:
+                details.append(f"{where} 삭제: `{_short(old, 60)}`")
+        if len(changes) > MAX_DETAIL:
+            details.append(f"외 {len(changes) - MAX_DETAIL}곳")
+        if unresolved:
+            details.append(f"근거가 부족해 그대로 둔 줄 {len(unresolved)}곳")
+        return f"③ {len(changes)}곳 고침", "④ 검사하는 중", details
     if node == "verifier":
         v, n = upd.get("verify_result") or {}, upd.get("attempt", 0)
+        warns = v.get("warnings") or []
         if v.get("passed"):
-            return f"④ 검사 통과 ({n}회차)", "결과 정리하는 중"
-        return f"④ 검사 {n}회차 실패 ({len(v.get('errors') or [])}건) → 근거를 다시 찾아 고쳐요", "② 근거 다시 찾는 중"
+            details = ["11가지 검사 모두 통과"] + ([f"참고 경고: {', '.join(_error_names(warns))}"] if warns else [])
+            return f"④ 검사 통과 ({n}회차)", "결과 정리하는 중", details
+        errors = v.get("errors") or []
+        details = [f"걸린 검사: {', '.join(_error_names(errors))}"]
+        details += [_short(e.get("message"), 90) for e in errors[:2]]
+        if n >= 3:
+            return f"④ 검사 {n}회차 실패 ({len(errors)}건) · 최대 3회라 여기서 멈춤", "결과 정리하는 중", details
+        return (f"④ 검사 {n}회차 실패 ({len(errors)}건) → 실패 이유를 들고 근거를 다시 찾아요",
+                "② 근거 다시 찾는 중", details)
     if node == "search":
-        return "문서에서 답을 찾았어요", "정리하는 중"
+        return "문서에서 답을 찾았어요", "정리하는 중", ["찾은 문서 조각만 근거로 답하고, 끝에 출처를 붙여요"]
     if node == "general":
-        return "답을 썼어요", "정리하는 중"
-    return f"{node} 완료", "다음 단계 진행 중"
+        return "답을 썼어요", "정리하는 중", []
+    return f"{node} 완료", "다음 단계 진행 중", []
 
 
 def ask(text: str, on_step=None) -> dict | None:
     """사용자가 보낸 글 하나를 팀 그래프에 그대로 넘긴다. 바꿀 버전도 그래프가 글에서 읽는다.
 
-    on_step(끝난 일, 다음에 할 일): 단계가 끝날 때마다 불러 화면에 진행 상황을 보여 준다 (그래프의 stream 사용).
-    돌려주는 것: {"kind": "migration" | "search" | "general", "reply": 답 글 또는 None, "result": 변환 결과 또는 None}
+    on_step(끝난 일, 다음에 할 일, 세부 내용): 단계가 끝날 때마다 불러 화면에 진행 상황을 보여 준다 (그래프의 stream 사용).
+    돌려주는 것: {"kind": "migration" | "search" | "general", "reply": 답 글 또는 None, "result": 변환 결과 또는 None,
+                 "steps": [{"done", "details", "sec"}] 처리 과정, "seconds": 걸린 시간}
     그래프를 쓸 수 없으면 None (화면이 임시 결과로 처리).
     """
     graph, _ = _pipeline()
     if graph is None:
         return None
+    import time
     from langchain_core.messages import HumanMessage
     inputs = {"question": text, "messages": [HumanMessage(content=text)]}
-    state = None
+    state, steps, t0 = None, [], time.time()
     for ns, mode, data in graph.stream(inputs, stream_mode=["updates", "values"], subgraphs=True):
         if mode == "values" and not ns:                     # 최상위 그래프의 지금 상태 (마지막 것이 최종)
             state = data
-        elif mode == "updates" and on_step:
+        elif mode == "updates":
             for node, upd in data.items():
                 if node == "migration":                      # 하위 그래프 전체가 끝난 알림은 건너뜀
                     continue
-                on_step(*_step_message(node, upd))
+                done, nxt, details = _step_message(node, upd)
+                steps.append({"done": done, "details": details, "sec": round(time.time() - t0, 1)})
+                if on_step:
+                    on_step(done, nxt, details)
     if state is None:
         raise RuntimeError("그래프가 결과를 돌려주지 않았어요")
+    seconds = round(time.time() - t0, 1)
     kind = state.get("classification") or ("migration" if _entry == "migration" else "general")
     if kind == "migration" or state.get("verify_result") is not None:
         target = state.get("target_version") or LATEST["langchain"]
-        return {"kind": "migration", "reply": None, "result": _from_graph(state, state.get("old_code", ""), target)}
-    return {"kind": kind, "reply": _last_ai_text(state) or "답을 만들지 못했어요. 다시 물어봐 주세요.", "result": None}
+        result = _from_graph(state, state.get("old_code", ""), target)
+        result["steps"], result["seconds"] = steps, seconds
+        return {"kind": "migration", "reply": None, "result": result, "steps": steps, "seconds": seconds}
+    return {"kind": kind, "reply": _last_ai_text(state) or "답을 만들지 못했어요. 다시 물어봐 주세요.", "result": None,
+            "steps": steps, "seconds": seconds}
 
 
 def run(code: str, target_version: str = "1.x", source_version: str | None = None) -> dict:
