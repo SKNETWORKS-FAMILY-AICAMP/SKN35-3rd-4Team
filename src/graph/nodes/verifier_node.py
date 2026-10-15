@@ -657,12 +657,14 @@ def _pipeline_output(expr: ast.AST, tree: ast.AST) -> str | None:
     return None
 
 
-def check_invoke_subscript(tree: ast.AST) -> list[dict]:
+def check_invoke_subscript(tree: ast.AST, evidence_id: str | None = None) -> list[dict]:
     """chain.invoke(...)["text"] 같은 코드를 찾는다. result = chain.invoke(...) 다음 result["text"]도 같다.
     구버전 LLMChain.invoke/__call__은 {"text": ...} dict를 돌려줘서 ['text']로 꺼냈지만,
     LCEL 체인은 StrOutputParser로 끝나면 문자열, 모델로 끝나면 AIMessage를 돌려준다 → 둘 다 ['text']를 쓰면 TypeError.
     LLM이 구버전 습관을 남기는 경우가 실제로 있어서(검증 통과 후 실행 실패) 추가한 검사.
-    예: chain = prompt | ChatOpenAI(...) / result = chain.invoke(...) / print(result["text"]) 가 11가지 검사를 통과했다."""
+    예: chain = prompt | ChatOpenAI(...) / result = chain.invoke(...) / print(result["text"]) 가 11가지 검사를 통과했다.
+    evidence_id: 이 수정의 근거로 달 ID(_lcel_evidence_id). 피드백에 근거 ID가 없으면 LLM이 ["text"]를 지운 변경에
+    근거를 못 달아 2번 검사(missing_evidence)에 걸리고, 재시도해도 통과할 수 없다(실제로 3회 모두 이 1건으로 실패)."""
     errors = []
     parent = {c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
     for call in ast.walk(tree):
@@ -684,11 +686,24 @@ def check_invoke_subscript(tree: ast.AST) -> list[dict]:
                      if isinstance(s, ast.Subscript) and isinstance(s.value, ast.Name) and s.value.id == var
                      and isinstance(s.ctx, ast.Load)]
         for n in subs:
-            errors.append(_subscript_issue(kind, ast.unparse(n.slice), n.lineno))
+            errors.append(_subscript_issue(kind, ast.unparse(n.slice), n.lineno, evidence_id))
     return errors
 
 
-def _subscript_issue(kind: str, key: str, lineno: int) -> dict:
+def _lcel_evidence_id(evidences: list[dict], shown: set[str]) -> str | None:
+    """["text"] 수정(LCEL 결과 다루기)의 근거로 쓸, 이번에 보여 준 근거 ID.
+    method_map 근거(Note에 'LCEL + StrOutputParser면 invoke가 문자열' 설명이 있음) → 없으면 LLMChain import_map 근거."""
+    shown_ev = [e for e in evidences if e.get("evidence_id") in shown]
+    for e in shown_ev:
+        if e.get("source") == "method_map":
+            return e["evidence_id"]
+    for e in shown_ev:
+        if e.get("source") == "import_map" and (e.get("old") or "").endswith("LLMChain"):
+            return e["evidence_id"]
+    return None
+
+
+def _subscript_issue(kind: str, key: str, lineno: int, evidence_id: str | None = None) -> dict:
     if kind == "str":
         msg = (f"체인이 StrOutputParser()로 끝나서 invoke 결과가 이미 문자열인데 [{key}]로 꺼내고 있습니다(실행하면 TypeError). "
                f"구버전 LLMChain 결과(dict)를 꺼내던 방식이 남은 것이니 [{key}]를 지우고 결과를 그대로 쓰세요.")
@@ -697,7 +712,9 @@ def _subscript_issue(kind: str, key: str, lineno: int) -> dict:
                f"(실행하면 TypeError: 'AIMessage' object is not subscriptable). "
                f"체인 끝에 | StrOutputParser()를 붙이고 [{key}]를 지우세요. "
                f"StrOutputParser의 import 줄도 추가하고 두 변경 모두 changes에 기록하세요.")
-    return issue("invoke_output_subscript", msg, new_line=lineno)
+    if evidence_id:
+        msg += f" [{key}]를 지운 변경은 근거 [{evidence_id}]로 기록하세요(evidence_ids에 {evidence_id})."
+    return issue("invoke_output_subscript", msg, new_line=lineno, evidence_id=evidence_id)
 
 
 # 11. 레거시 체인 입출력 키
@@ -800,7 +817,7 @@ def verify(
         e7, w7 = check_unused_imports(tree, used, _names(old_tree))                   # 7
         e8 = check_return_type(old_code, old_tree, tree)                              # 8
         e9, w9 = check_undefined_names(tree, old_tree, ev_paths)                      # 9
-        e10 = check_invoke_subscript(tree)                                            # 10
+        e10 = check_invoke_subscript(tree, _lcel_evidence_id(evidences, shown))       # 10
         e11 = check_chain_io_keys(tree)                                               # 11
 
         errors += e4 + e5 + e7 + e8 + e9 + e10 + e11
