@@ -381,10 +381,20 @@ def handle(text: str, status=None) -> None:
     # [선택 기능: followups] 연상 질문 — 끝
 
 
+TOP_CSS = """<style>
+[data-testid="stMainBlockContainer"] { padding-top: 3.9rem; padding-bottom: 1rem; }   /* 맨 위 빈 공간 줄이기 */
+.app-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: -6px; }
+.app-head .name { font-size: 1.45rem; font-weight: 700; }
+.app-head .desc { font-size: 0.85rem; opacity: 0.7; }
+</style>"""
+
+
 def chat_screen() -> None:
-    st.markdown(f"#### {APP_NAME}")
-    st.caption(APP_DESC)
-    st.caption(f"바꿀 버전은 질문에 적어 주세요 (예: \"0.2로 되돌려 줘\"). 적지 않으면 최신 LangChain {LATEST['langchain']}로 바꿔요.")
+    # 제목 · 설명을 한 줄로, 안내도 한 줄로 줄여 대화 칸과 입력창이 스크롤 없이 한 화면에 들어오게 (팀 의견 10-15)
+    st.html(TOP_CSS)
+    st.markdown(f"<div class='app-head'><span class='name'>{APP_NAME}</span><span class='desc'>{APP_DESC}</span></div>",
+                unsafe_allow_html=True)
+    st.caption(f"바꿀 버전은 질문에 적어 주세요 (예: \"0.2로 되돌려 줘\"). 없으면 최신 LangChain {LATEST['langchain']}로 바꿔요.")
 
     chat_col, result_col = st.columns([1, 1.25], gap="large")
     with chat_col:
@@ -396,7 +406,7 @@ def chat_screen() -> None:
             if info:
                 st.caption(f":material/forum: 세션 {info['session_id'][:8]} · {info['started_at'] + KST:%m/%d %H:%M} 시작 · "
                            f"질문 {info['turns']}개 · 같은 세션에 이어서 저장 중")
-        box = st.container(height=430)              # 대화 칸을 줄이고 입력창을 위로 · 크게 (팀 의견 10-15)
+        box = st.container(height=400)              # 대화 칸을 줄이고 입력창을 위로 · 크게 (팀 의견 10-15)
         with box:
             if not ss["messages"]:
                 with st.chat_message("assistant"):
