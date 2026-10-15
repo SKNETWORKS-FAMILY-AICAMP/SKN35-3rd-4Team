@@ -1,9 +1,3 @@
-"""코드 이름을 잘게 나누는 BM25 (외부 의존성 없음).
-
-토큰화: ChatOpenAI → chatopenai, chat, open, ai / langchain.chains → langchain, chains
-원래 이름(소문자)도 함께 남겨서 정확한 클래스 이름이 가장 강하게 맞도록 한다.
-"""
-
 import math
 import re
 from collections import Counter, defaultdict

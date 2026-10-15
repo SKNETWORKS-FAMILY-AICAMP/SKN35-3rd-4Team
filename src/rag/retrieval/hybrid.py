@@ -1,12 +1,16 @@
 import argparse
+import hashlib
 import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..import_map import LATEST_VERSION, VERSION_SETS
+from ..import_map.build_import_map import version_key
+from ..import_map.version_resolve import Resolution, normalize_version, resolve
 from . import (
-    CANDIDATES, CHUNKS_PATH, DEFAULT_K, DOC_REF_BOOST, DOC_SOURCES, ERA_WEIGHT, FUZZY_MAP_K, IMPORT_LINK_BOOST,
-    MAX_PER_PAGE, RRF_K,
+    CANDIDATES, CHUNKS_PATH, DEFAULT_K, DOC_REF_BOOST, DOC_SOURCES, ERA_WEIGHT, ERA_WEIGHT_0X, FUZZY_MAP_K,
+    IMPORT_LINK_BOOST, MAX_PER_PAGE, RRF_K,
 )
 from .bm25 import BM25
 from .import_lookup import MapHit, lookup, lookup_methods, parse_import_paths
@@ -114,6 +118,32 @@ class RetrievalEngine:
             signals=["via_module"] if hit.via_module else [],
         )
 
+    @staticmethod
+    def _seen_in_1x(path: str) -> bool:
+        """1.x 대표 버전 중 하나에라도 있던 경로 (1.x 안에서 사라진 것 → 유사 검색보다 '대응 없음'이 정확)."""
+        return any(resolve(path, v).status == "keep" for v in VERSION_SETS if version_key(v)[0] >= 1)
+
+    def _version_evidence(self, res: Resolution) -> Evidence:
+        """목표 버전 판정 결과 → import_map 형식 근거 (rewriter·verifier가 같은 필드를 읽도록).
+        같은 대응표 레코드를 여러 경로가 거칠 수 있어 id는 (목표 버전, 경로)로 따로 만든다."""
+        evidence_id = "vres-" + hashlib.sha1(f"{res.target}|{res.path}".encode()).hexdigest()[:10]
+        if res.status == "moved":
+            kind = "classic_fallback" if res.new.startswith("langchain_classic.") else "native"
+            text = f"Legacy import: {res.path}\nLangChain {res.target} import: {res.new}"
+        else:
+            kind = "unresolved"
+            text = f"Legacy import: {res.path}\nLangChain {res.target} import: (no equivalent)"
+        signals = [f"target:{res.target}", *(f"via:{i}" for i in res.evidence_ids)]
+        if not res.verified:
+            signals.append("unverified")
+        if res.deprecated:
+            signals.append("deprecated_in_target")
+        return Evidence(
+            evidence_id=evidence_id, source="import_map", match="exact", score=1.0, text=text, era=res.target,
+            old=res.path, new=res.new if res.status == "moved" else None, kind=kind,
+            alternative=res.alternative, signals=signals,
+        )
+
     def _method_evidence(self, rec: dict) -> Evidence:
         chunk = self.chunks.get(rec["id"], {})
         return Evidence(
@@ -140,22 +170,42 @@ class RetrievalEngine:
         k: int = DEFAULT_K,
         exclude_ids: set[str] | frozenset[str] = frozenset(),
         attempt: int = 0,
+        target_version: str | None = None,
     ) -> list[Evidence]:
         width = attempt + 1
         paths = parse_import_paths(old_path) if old_path else parse_import_paths(query)
+        target = normalize_version(target_version)
+        latest = target == LATEST_VERSION
 
-        # ① 대응표 정확매칭
+        # ① 대응표 정확매칭 (최신이 아니면 목표 버전 기준 판정, 그대로 둬도 되는 경로는 근거 없음)
         map_evidence: list[Evidence] = []
         unmatched = []
         for path in paths:
+            if not latest:
+                res = resolve(path, target)
+                if res.status in ("moved", "not_available"):
+                    ev = self._version_evidence(res)
+                    if ev.evidence_id not in exclude_ids:
+                        map_evidence.append(ev)
+                continue
             hit = lookup(path)
             if hit is None:
-                unmatched.append(path)
+                # 대응표에 없는 경로: 최신에 그대로 있으면 근거 불필요, 1.x 안에서 옮겨졌으면 판정 근거,
+                # 판정도 못 하면 유사 검색으로
+                res = resolve(path, target)
+                if res.status == "moved" or (res.status == "not_available" and self._seen_in_1x(path)):
+                    ev = self._version_evidence(res)
+                    if ev.evidence_id not in exclude_ids:
+                        map_evidence.append(ev)
+                elif res.status != "keep":
+                    unmatched.append(path)
             elif hit.record["id"] not in exclude_ids:
                 map_evidence.append(self._map_evidence(hit, "exact", 1.0))
 
-        # ①-2 메서드 호출 정확매칭 (chain.run(), llm.predict(), llm("...") 등)
-        method_hits = [r for r in lookup_methods(query) if r["id"] not in exclude_ids]
+        # ② 메서드 호출 정확매칭 (chain.run(), llm.predict(), llm("...") 등)
+        #    최신이 아니면 목표 버전에서 이미 deprecated된 메서드만 (그 전 버전엔 대체 메서드가 없을 수 있다)
+        method_hits = [r for r in lookup_methods(query) if r["id"] not in exclude_ids
+                        and (latest or (r.get("since") and version_key(r["since"]) <= version_key(target)))]
         method_evidence = [self._method_evidence(r) for r in method_hits]
         doc_refs = {p for r in method_hits for p in r.get("doc_refs", [])}
 
@@ -177,7 +227,7 @@ class RetrievalEngine:
                 if len(seen_new) >= FUZZY_MAP_K:
                     break
 
-        # ② 문서 하이브리드 검색 (정확매칭된 1.x 경로·대안 텍스트로 질의 확장)
+        # ④ 문서 하이브리드 검색 (정확매칭된 1.x 경로·대안 텍스트로 질의 확장)
         exact = [e for e in map_evidence if e.match == "exact"]
         expansion = [e.new for e in exact if e.new] + [e.alternative for e in exact if e.alternative]
         expansion += [r["alternative"] for r in method_hits if r.get("alternative")]
@@ -192,15 +242,16 @@ class RetrievalEngine:
                 chunk_id = self.doc_ids[best[0][0]]
                 scores[chunk_id] = max(scores.get(chunk_id, 0.0), anchor)
 
-        # ④ 규칙 기반 재정렬
+        # ⑤ 규칙 기반 재정렬
         target_keys = {loose_key(e.new) for e in exact if e.new}
+        era_weight = ERA_WEIGHT_0X if version_key(target)[0] < 1 else ERA_WEIGHT
         ranked = []
         for chunk_id, score in scores.items():
             if chunk_id in exclude_ids:
                 continue
             signals = []
             era = self.chunks[chunk_id]["era"]
-            score *= ERA_WEIGHT.get(era, 1.0)
+            score *= era_weight.get(era, 1.0)
             if era != "1.x":
                 signals.append(f"era:{era}")
             if target_keys & self.chunk_import_keys.get(chunk_id, set()):
@@ -232,11 +283,13 @@ def main():
     parser.add_argument("--old", default=None, help="legacy import statement or dotted path")
     parser.add_argument("-k", type=int, default=DEFAULT_K)
     parser.add_argument("--attempt", type=int, default=0)
+    parser.add_argument("--target", default=None, help="target langchain version (default: latest)")
     parser.add_argument("--json", action="store_true", help="print full evidence as JSON")
     args = parser.parse_args()
 
     engine = RetrievalEngine()
-    results = engine.retrieve(args.query, old_path=args.old, k=args.k, attempt=args.attempt)
+    results = engine.retrieve(args.query, old_path=args.old, k=args.k, attempt=args.attempt,
+                                target_version=args.target)
     if args.json:
         print(json.dumps([e.to_dict() for e in results], ensure_ascii=False, indent=2))
         return

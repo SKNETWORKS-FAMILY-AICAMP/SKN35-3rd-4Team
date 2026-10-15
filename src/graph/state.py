@@ -8,14 +8,13 @@ def merge_ids(left: list[str] | None, right: list[str] | None) -> list[str]:
     """재시도마다 verifier가 돌려주는 exclude_ids를 덮어쓰지 않고 누적한다(중복 제거)."""
     return sorted(set(left or []) | set(right or []))
 
-class RootState(TypedDict):
+class MigrationState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     classification: str
-
-class MigrationState(RootState):
     question: str
     old_code: NotRequired[str]      # 사용자가 질문한 코드
     analysis: NotRequired[dict | str]      # 분석 결과 (analyzer는 dict로 넣음)
+    target_version: NotRequired[str] # 목표 langchain 대표 버전 (예: "0.2.17"). 질문에 버전 언급 없으면 최신. normalize_version()으로 맞춘 값
     new_code: NotRequired[str]
     evidence_id: NotRequired[str]
     changes: NotRequired[list[dict]] # Rewriter가 구조화 출력으로 생성한 근거 ID가 포함된 변경 목록 저장
