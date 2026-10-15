@@ -27,7 +27,7 @@ from datetime import timedelta
 import streamlit as st
 
 from src.ui import db
-from src.ui.client import LATEST, ask, graph_status, mode, run
+from src.ui.client import LATEST, ask, graph_status, run
 from src.ui.optional import load
 from src.ui.mock import import_paths
 from src.ui import result_view
@@ -207,13 +207,13 @@ def sidebar() -> None:
         with st.container(horizontal=True, vertical_alignment="center"):
             st.markdown(f":material/account_circle: **{ss['user']['user_id']}**")
             st.button("로그아웃", key="logout", type="tertiary", on_click=logout)
-        badge = {"mock": ("변환: 가짜 결과 · 근거 예시", "gray"),
-                 "mock+real_evidence": ("변환: 가짜 결과 · 근거 2번 대응표", "blue")}.get(mode(), ("변환: 팀 챗봇", "green"))
-        st.badge(badge[0], icon=":material/lan:", color=badge[1])
+        # 연결 상태는 정상일 때는 표시하지 않고, 문제가 있을 때만 이유를 한 줄로 알린다 (팀 결정 10-15)
         ok, why = graph_status()
         if not ok:
-            st.caption(f"팀 그래프 연결 안 됨: {why}")
-        st.badge(f"기록: {db.backend_name()}", icon=":material/database:", color="gray")
+            st.caption(f":material/warning: 팀 챗봇 연결 안 됨 (임시 결과로 보여 줘요): {why}")
+        backend = db.backend_name()
+        if "연결 실패" in backend:
+            st.caption(f":material/warning: 대화 기록: {backend}")
 
 
 # ---------------------------------------------------------------- 결과 패널
