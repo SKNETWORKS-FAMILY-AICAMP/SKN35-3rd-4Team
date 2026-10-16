@@ -1,0 +1,13 @@
+# 웹 화면(streamlit_app.py) 실행 · 배포용 패키지. 팀 pyproject · uv.lock 에는 streamlit · sqlalchemy · pymysql · python-dotenv 가 없어 여기에 모두 적음
+streamlit>=1.62
+sqlalchemy>=2.0
+pymysql>=1.1
+certifi
+python-dotenv
+langchain>=1.4.4
+langchain-core>=1.6
+langchain-chroma>=1.1.0
+langchain-openai>=1.7.1
+langgraph>=1.2.14
+pydantic>=2.14.1
+chromadb>=1.5

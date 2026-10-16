@@ -1,0 +1,19 @@
+[project]
+name = "skn35-3rd-4team"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "wsc9150", email = "wsc9150@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=1.4.4",
+    "langchain-chroma>=1.1.0",
+    "langchain-openai>=1.7.1",
+    "langgraph>=1.2.14",
+    "pydantic>=2.14.1",
+    "pymysql>=1.2.3",
+    "sqlalchemy>=2.1.4",
+    "streamlit>=1.66.0",
+]
