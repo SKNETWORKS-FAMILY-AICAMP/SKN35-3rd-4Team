@@ -4,7 +4,25 @@
 
 일반 LLM은 학습 시점의 옛 API를 그대로 답하는 "버전 지체 환각"이 잦습니다. 이 프로젝트는 바꾼 줄마다 근거 ID를 달게 하고, 결과 코드를 정적 검사해 근거 없는 변경이나 존재하지 않는 import가 나오면 다시 검색·재작성합니다.
 
----
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1.4.5-1C3C3C?logo=langchain&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.6x-FF4B4B?logo=streamlit&logoColor=white)<br/>
+![TiDB](https://img.shields.io/badge/TiDB-Cloud-E30C34)
+![Chroma](https://img.shields.io/badge/Chroma-Cloud-F2A33A)
+
+</div>
+
+## 팀원 구성
+
+| | 이름 | 역할 |
+| --- | --- | --- |
+| <img src="./docs/profile/햄스터.png" width="100" > | 손채영 | 데이터 수집 및 청킹 / Chroma VectorDB 구축 / RAG 검색 Node 정의 / 발표 |
+| <img src="./docs/profile/쿼카.png" width="100" > | 심성욱 | 화면 UI 설계 및 구현 / Migration Pipeline 실행 결과 검증 |
+| <img src="./docs/profile/가젤.png" width="100" > | 조현주 | 코드 재작성 및 검증 Node 정의 / Migration Pipeline 통합 테스트 |
+| <img src="./docs/profile/나무늘보.png" width="100" > | 최우석 | 프로젝트 폴더 구조 정의 / LangGraph 구조 설계 / 질문 분기 및 코드 분석 Node 정의 |
 
 ## 주요 기능
 
@@ -13,8 +31,6 @@
 - **자동 검증 + 재시도**: 문법, import 존재 여부, 근거 ID, 반환 타입 보존 등을 검사하고 실패 시 최대 3회 재시도
 - **설치 패키지 안내**: 새 코드가 쓰는 `langchain-*` 패키지 목록 제공
 - **문서 검색 Q&A**: "0.3과 1.0 차이가 뭐야?" 같은 질문은 수집한 문서에서 찾아 답변
-
----
 
 ## 아키텍처
 
@@ -56,8 +72,6 @@ flowchart LR
 
 LLM은 모두 OpenAI `gpt-4o-mini`를 사용합니다.
 
----
-
 ## RAG 데이터
 
 | 데이터 | 규모 | 설명 |
@@ -76,33 +90,81 @@ LLM은 모두 OpenAI `gpt-4o-mini`를 사용합니다.
 3. **하이브리드 문서 검색**: 벡터 검색 + BM25를 RRF로 합침. 정확매칭된 새 경로로 질의 확장
 4. **재정렬**: 0.3 문서 가중치 감소, 목표 import를 쓰는 문서 가중치 증가, 페이지당 최대 2개
 
----
+## 평가 방법
+
+같은 질문 30개를 **일반 LLM**과 **우리 챗봇**에 넣고 **LLM 없이 코드로** 채점해 비교하고(비교 평가), 팀이 정한 규칙대로 동작하는지 따로 점검합니다(자체 평가).
+
+| 유형 (각 3개) | 쉬움 | 중간 | 어려움 |
+|---|---|---|---|
+| import 경로 · 문서 로더 · 임베딩 · LLMChain → LCEL · 체인 조합 · RAG · 메모리 · 에이전트 · 출력 파서 · 실무 상황 | 7 | 15 | 8 |
+
+- **질문**: 실제 사용자처럼 "요청 문장 + 옛 코드". 30개 모두 옛 코드가 1.x에서 깨지고 기대 import가 1.x에서 되는지 미리 확인 (36/36, 버전 오가기 6개 포함)
+- **공정성**: 양쪽 같은 gpt-4o-mini, temperature 0, 같은 입력. 일반 LLM은 시스템 프롬프트 없이 (ChatGPT에 붙여 넣는 상황). 우리 챗봇만 최대 3회
+- **공통 채점 8항목** (두 답에 같은 잣대): 문법 · 옛 import 없음 · import 실제 존재(1.x 도구 목록) · 정의 안 된 이름 없음 · 결과값 보존 · 남은 import 없음 · 정답 import 포함 · 실제로 바꿈 → 8개 모두 통과해야 '공통 기준 통과'
+- **자체 평가 21항목 (100점)**: 질문 분류 · 분석 · 근거 검색 · 고쳐 쓰기 규칙 · 검증 루프 · 답변 규칙 · 안정성 (팀 프롬프트 · 코드에 적힌 규칙 그대로)
+- 실행: `python eval/run_eval.py` → 채점: `python eval/score.py` (자세히: [eval/README.md](eval/README.md))
+
+## 결과
+
+**실제 실행 사례** (2026-10-14): 0.0.300 `LLMChain` 코드를 화면 경로로 팀 그래프에 보냄 → 두 번 실행해 **두 번 모두 3회차 통과**
+
+```python
+# 변경 전                                          # 변경 후 (팀 그래프)
+from langchain.chat_models import ChatOpenAI       from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate       from langchain_core.prompts import PromptTemplate
+from langchain.chains import LLMChain              from langchain_core.output_parsers import StrOutputParser
+chain = LLMChain(llm=llm, prompt=...)              chain = PromptTemplate.from_template(...) | llm | StrOutputParser()
+print(chain.run(word='크다'))                       print(chain.invoke({'word': '크다'}))
+```
+
+바뀐 6줄 모두 근거 ID(`imap-…`, `mmap-…`, `doc-…`) · 못 바꾼 줄 0 · 한 번 변환에 약 1분
+
+**비교 실험** (2026-10-15, 1.x로 올리기 30개, gpt-4o-mini)
+
+| 항목 | 우리 챗봇 | 일반 LLM |
+|---|---|---|
+| **공통 기준 통과 (8개 모두)** | **57%** | **0%** |
+| 실행 기준 통과 (정답 import 제외) | 87% | 0% |
+| 옛 import 없음 | 93% | 3% |
+| import가 1.x에 실제로 있음 | 90% | 3% |
+| 정답 import 포함 | 60% | 0% |
+| 난이도별 (쉬움 · 중간 · 어려움) | 100% · 53% · 25% | 0% · 0% · 0% |
+| 응답 시간 (중앙값) | 11.6초 | 3.5초 |
+
+- 일반 LLM은 30개 중 29개에서 옛 import를 그대로 두고 "1.x에 맞게 수정했다"고 답했습니다 (버전 지체 환각 재현)
+- 검증 통과: 1회차 43% → 최종 53% · **재시도 효과 +10%p** · 통과한 답 평균 1.2회 · 바뀐 줄의 **93%에 근거 ID**
+- 통과 못 한 답은 화면에 '검증 실패'와 이유를 표시 (일반 LLM은 실패를 알리지 않음)
+- 버전 오가기 6개(참고): 목표 버전 읽기 100%, 정답 import 0% → 검사기를 목표 버전 기준으로 바꾸는 것이 다음 단계
+
+**자체 평가** 83.3점 / 100 (B) · 21항목 중 13항목 목표 달성
+
+| 영역 | 점수 | | 영역 | 점수 |
+|---|---|---|---|---|
+| 분석 | 9.8 / 10 | | 질문 분류 | 14.0 / 15 |
+| 근거 검색 | 9.9 / 10 | | 고쳐 쓰기 | 22.3 / 25 |
+| 답변 규칙 | 5.0 / 5 | | 검증 · 재시도 | 17.3 / 30 |
+| 안정성 · 속도 | 5.0 / 5 | | **합계** | **83.3** |
 
 ## 폴더 구조
 
+```text
+├── streamlit_app.py            # (4번) 화면 입구: 로그인 · 대화 목록 · 진행 표시 · 결과 패널
+├── app.py · check_nodes.py     # (1번) 그래프 실행 시험 · (3번) 노드 하나씩 점검
+├── src/
+│   ├── graph/
+│   │   ├── supervisor.py       # (1번) 최상위 그래프: classifier → migration · search · general
+│   │   ├── migration.py        # (1번) 변환 파이프라인: analyzer → retriever → rewriter → verifier (재시도)
+│   │   ├── state.py            # (3번 · 2번) MigrationState
+│   │   └── nodes/              # classifier · general · analyzer (1번) / retriever · search (2번) / rewriter · verifier (3번)
+│   ├── prompt/                 # analyzer · classifier · general (1번) / search (2번) / rewriter (3번)
+│   ├── rag/                    # (2번) docs_collect · import_map(대응표 · 목표 버전 판정) · chunking · embedding · retrieval
+│   └── ui/                     # (4번) client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py
+├── data/                       # (2번) raw/(문서 · 버전별 도구 목록 42개 · CLI 규칙) · processed/(대응표 · 메서드 대응표 · 청크)
+├── eval/                       # (4번) questions.json(36) · route_probes.json(14) · run_eval.py · score.py · results/
+├── tools/bot_check.py          # (4번) 화면 · DB 자동 점검 19가지
+├── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
+└── 발표자료/                   # 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 · 평가 보고서 · 화면 캡처 · 이전버전/
 ```
-├── app.py                    실행 예시 (질문 → 그래프 실행 → 결과 출력)
-├── check_nodes.py            노드 4개를 한 번씩 실행해 보는 디버깅 스크립트
-├── src
-│   ├── graph
-│   │   ├── supervisor.py     최상위 그래프
-│   │   ├── migration.py      마이그레이션 서브그래프
-│   │   ├── state.py          MigrationState 정의
-│   │   └── nodes/            각 노드 구현
-│   ├── prompt/               노드별 프롬프트
-│   └── rag
-│       ├── import_map/       심볼 추출, import·메서드 대응표 생성, 버전 해석
-│       ├── docs_collect/     최신 문서·마이그레이션 가이드 수집
-│       ├── chunking/         MDX 정리, 청크 생성
-│       ├── embedding/        벡터DB 빌드
-│       └── retrieval/        정확매칭·BM25·하이브리드 검색 엔진
-└── data
-    ├── raw/                  심볼 목록, cli 매핑, 수집 문서 원문
-    ├── processed/            import_map / method_map / chunks (.jsonl)
-    └── vectordb/chroma/      Chroma 벡터DB
-```
-
----
 
 ## 시작하기
 
@@ -130,70 +192,14 @@ uv run python app.py
 uv run python check_nodes.py
 ```
 
-검색 엔진만 따로 확인하려면:
+streamlit 실행:
 
 ```bash
-uv run python -m src.rag.retrieval.hybrid "from langchain.chains import LLMChain"
+uv run streamlit run streamlit_app.py
 ```
 
----
+## 구현 화면
 
-## 데이터 재생성 (데이터 담당만)
+코드 Migration 결과
 
-`data/` 폴더는 벡터DB까지 git에 포함되어 있어 보통은 다시 만들 필요가 없습니다. 벡터DB는 충돌을 막기 위해 데이터 담당만 재생성·커밋합니다.
-
-```bash
-uv run python -m src.rag.import_map.run_all
-```
-
-```bash
-uv run python -m src.rag.docs_collect.fetch_latest_docs
-```
-
-```bash
-uv run python -m src.rag.docs_collect.fetch_migration_guides
-```
-
-```bash
-uv run python -m src.rag.chunking.build_chunks
-```
-
-```bash
-uv run python -m src.rag.embedding.build_vectordb
-```
-
-벡터DB는 청크 해시로 증분 갱신하므로 바뀐 청크만 다시 임베딩합니다.
-
----
-
-## 문서 · 발표자료
-
-> 아래 파일은 **`sungwook` 브랜치**에 있습니다 (dev에는 코드만 둡니다). 링크를 누르면 sungwook 브랜치의 파일이 열립니다.
-
-| 문서 | 내용 |
-|---|---|
-| [프로젝트 최종 보고서](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/docs/프로젝트_최종_보고서.md) | **전체 보고서**: 설계(LLM + RAG 파이프라인 · State · 프롬프트 · 검사) · 파일 구조 · 데이터 · 화면 · DB · 역할별 작업 기록과 트러블슈팅 · 타임라인 · 평가 · 의의 · 한계 |
-| [작업 기록 (배포 저장소)](https://github.com/SKN35shimsungwook/langchain-migration-assistant/blob/main/docs/작업_기록.md) | 4번 작업을 대화 순서대로 정리한 기록, 보조 파일 전체는 배포 저장소 `작업기록/` |
-| [평가 결과와 개선 방안](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/docs/평가_결과와_개선방안.md) | 비교 평가 · 자체 평가 결과, 강점 · 약점 · 개선 방안 · 의의 |
-| [eval/README.md](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/eval/README.md) | 평가 질문 36개, 실행 · 채점 도구 |
-| [화면 실행 방법](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/docs/화면_실행방법.md) | 화면 실행 · 비밀 값 · 자동 점검 · 자주 나는 문제 |
-| [DB 설계](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/docs/DB_설계.md) | ERD (users, chat_history), 화면이 DB를 쓰는 방법, 이전 설계 |
-| [머지 가이드](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/docs/머지_가이드.md) | 팀 저장소와 겹치는 파일, 가져갈 기능 · 뺄 기능 |
-| [발표자료 폴더](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/tree/sungwook/발표자료) | **발표 당일 제출본 폴더** (이전 버전은 [발표자료/이전버전](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/tree/sungwook/발표자료/이전버전)) |
-| [프로젝트 최종 보고서 (PDF)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/프로젝트_최종_보고서.pdf) · [Word](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/프로젝트_최종_보고서.docx) | 전체 보고서 제출본 |
-| [발표 PPT](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/LangChain_마이그레이션_도우미_발표.pptx) · [PDF](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/LangChain_마이그레이션_도우미_발표.pdf) | 본편 19장 + 질문 대응용 부록 3장 |
-| [발표 대본 (Word)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/발표_대본.docx) · [PDF](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/발표_대본.pdf) | 장마다 훅 · 설명 · 넘기는 말, 예상 질문과 답 |
-| [테스트 계획 및 결과 보고서](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/테스트_계획_및_결과_보고서.pdf) · [평가 결과 보고서](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/평가_결과_보고서.pdf) | 부속 보고서 (테스트 · 비교 평가 · 자체 평가) |
-| [화면 캡처](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/LangChain_마이그레이션_도우미_화면.jpg) | 실제 화면 (2026-10-15) |
-| [PLAN_10-15_업데이트.md](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN35-3rd-4Team/blob/sungwook/발표자료/PLAN_10-15_업데이트.md) | 역할 분담 계획서 · 진행 상황 (10-15) |
-
----
-
-## 팀
-
-| 이름 | 역할 |
-|---|---|
-|  |  |
-|  |  |
-|  |  |
-|  |  |
+<img src="./docs/images/화면_기록/02_배포_예제_검증통과.png"/>
