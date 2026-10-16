@@ -201,3 +201,5 @@ data/vectordb
 .streamlit/secrets.toml
 data/local_chat.db
 data/local_chat_history.db
+weekly_summarizer.py
+reports/weekly_meeting_report_20261015.md
