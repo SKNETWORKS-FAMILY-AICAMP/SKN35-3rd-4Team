@@ -351,7 +351,7 @@ def handle(text: str, status=None) -> None:
     code = extract_code(text)
     result, steps, seconds, graph_error = None, [], None, None
     try:
-        answer = ask(text, on_step)                  # 팀 그래프 (없으면 None)
+        answer = ask(text, on_step, thread_id=f"{ss['user']['user_id']}:{ss['session_id']}")   # 팀 그래프 (없으면 None)
     except Exception as e:                           # 그래프 실행 중 오류 → 임시 결과로 계속
         answer = None
         graph_error = f"{type(e).__name__}: {str(e)[:300]}"

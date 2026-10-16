@@ -237,10 +237,14 @@ def _step_message(node: str, upd: dict) -> tuple[str, str, list[str]]:
     return f"{node} 완료", "다음 단계 진행 중", []
 
 
-def ask(text: str, on_step=None) -> dict | None:
+MIGRATION_NODES = {"analyzer", "retriever", "rewriter", "verifier"}
+
+
+def ask(text: str, on_step=None, thread_id: str | None = None) -> dict | None:
     """사용자가 보낸 글 하나를 팀 그래프에 그대로 넘긴다. 바꿀 버전도 그래프가 글에서 읽는다.
 
     on_step(끝난 일, 다음에 할 일, 세부 내용): 단계가 끝날 때마다 불러 화면에 진행 상황을 보여 준다 (그래프의 stream 사용).
+    thread_id: 대화(세션) 번호. 그래프에 체크포인터(대화 기억)가 붙으면 이 번호로 대화끼리 섞이지 않게 한다.
     돌려주는 것: {"kind": "migration" | "search" | "general", "reply": 답 글 또는 None, "result": 변환 결과 또는 None,
                  "steps": [{"done", "details", "sec"}] 처리 과정, "seconds": 걸린 시간}
     그래프를 쓸 수 없으면 None (화면이 임시 결과로 처리).
@@ -251,14 +255,19 @@ def ask(text: str, on_step=None) -> dict | None:
     import time
     from langchain_core.messages import HumanMessage
     inputs = {"question": text, "messages": [HumanMessage(content=text)]}
+    config = {"configurable": {"thread_id": thread_id}} if thread_id else None
     state, steps, t0 = None, [], time.time()
-    for ns, mode, data in graph.stream(inputs, stream_mode=["updates", "values"], subgraphs=True):
+    turn_kind, ran_migration = None, False                  # 이번 질문에서 실제로 일어난 일 (기억된 옛 상태와 구분)
+    for ns, mode, data in graph.stream(inputs, config=config, stream_mode=["updates", "values"], subgraphs=True):
         if mode == "values" and not ns:                     # 최상위 그래프의 지금 상태 (마지막 것이 최종)
             state = data
         elif mode == "updates":
             for node, upd in data.items():
                 if node == "migration":                      # 하위 그래프 전체가 끝난 알림은 건너뜀
                     continue
+                if node == "classifier" and isinstance(upd, dict):
+                    turn_kind = upd.get("classification")
+                ran_migration = ran_migration or node in MIGRATION_NODES
                 done, nxt, details = _step_message(node, upd)
                 steps.append({"done": done, "details": details, "sec": round(time.time() - t0, 1)})
                 if on_step:
@@ -266,8 +275,10 @@ def ask(text: str, on_step=None) -> dict | None:
     if state is None:
         raise RuntimeError("그래프가 결과를 돌려주지 않았어요")
     seconds = round(time.time() - t0, 1)
-    kind = state.get("classification") or ("migration" if _entry == "migration" else "general")
-    if kind == "migration" or state.get("verify_result") is not None:
+    # 답의 종류는 '이번 질문'의 분류로 정한다. 그래프가 대화를 기억하면(체크포인터) 앞 질문의
+    # verify_result · old_code 가 state에 남아 있어, 인사에도 이전 변환 결과를 보여 주는 문제가 있었다 (10-15)
+    kind = turn_kind or state.get("classification") or ("migration" if _entry == "migration" else "general")
+    if kind == "migration" or (turn_kind is None and ran_migration):
         target = state.get("target_version") or LATEST["langchain"]
         result = _from_graph(state, state.get("old_code", ""), target)
         result["steps"], result["seconds"] = steps, seconds
