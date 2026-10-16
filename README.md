@@ -4,18 +4,25 @@
 
 일반 LLM은 학습 시점의 옛 API를 그대로 답하는 "버전 지체 환각"이 잦습니다. 이 프로젝트는 바꾼 줄마다 근거 ID를 달게 하고, 결과 코드를 정적 검사해 근거 없는 변경이나 존재하지 않는 import가 나오면 다시 검색·재작성합니다.
 
----
+<div align="center">
 
-## 팀
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1.4.5-1C3C3C?logo=langchain&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.6x-FF4B4B?logo=streamlit&logoColor=white)<br/>
+![TiDB](https://img.shields.io/badge/TiDB-Cloud-E30C34)
+![Chroma](https://img.shields.io/badge/Chroma-Cloud-F2A33A)
+
+</div>
+
+## 팀원 구성
 
 | | 이름 | 역할 |
 | --- | --- | --- |
-| <img src="./doc/profile/햄스터.png" width="100" > | 손채영 | 데이터 수집 및 청킹 / Chroma VectorDB 구축 / RAG 검색 Node 정의 / 발표 |
-| <img src="./doc/profile/쿼카.png" width="100" > | 심성욱 | 화면 UI 설계 및 구현 / Migration Pipeline 실행 결과 검증 |
-| <img src="./doc/profile/가젤.png" width="100" > | 조현주 | 코드 재작성 및 검증 Node 정의 / Migration Pipeline 통합 테스트 |
-| <img src="./doc/profile/나무늘보.png" width="100" > | 최우석 | 프로젝트 폴더 구조 정의 / LangGraph 구조 설계 / 질문 분기 및 코드 분석 Node 정의 |
-
----
+| <img src="./docs/profile/햄스터.png" width="100" > | 손채영 | 데이터 수집 및 청킹 / Chroma VectorDB 구축 / RAG 검색 Node 정의 / 발표 |
+| <img src="./docs/profile/쿼카.png" width="100" > | 심성욱 | 화면 UI 설계 및 구현 / Migration Pipeline 실행 결과 검증 |
+| <img src="./docs/profile/가젤.png" width="100" > | 조현주 | 코드 재작성 및 검증 Node 정의 / Migration Pipeline 통합 테스트 |
+| <img src="./docs/profile/나무늘보.png" width="100" > | 최우석 | 프로젝트 폴더 구조 정의 / LangGraph 구조 설계 / 질문 분기 및 코드 분석 Node 정의 |
 
 ## 주요 기능
 
@@ -24,8 +31,6 @@
 - **자동 검증 + 재시도**: 문법, import 존재 여부, 근거 ID, 반환 타입 보존 등을 검사하고 실패 시 최대 3회 재시도
 - **설치 패키지 안내**: 새 코드가 쓰는 `langchain-*` 패키지 목록 제공
 - **문서 검색 Q&A**: "0.3과 1.0 차이가 뭐야?" 같은 질문은 수집한 문서에서 찾아 답변
-
----
 
 ## 아키텍처
 
@@ -67,8 +72,6 @@ flowchart LR
 
 LLM은 모두 OpenAI `gpt-4o-mini`를 사용합니다.
 
----
-
 ## RAG 데이터
 
 | 데이터 | 규모 | 설명 |
@@ -87,8 +90,6 @@ LLM은 모두 OpenAI `gpt-4o-mini`를 사용합니다.
 3. **하이브리드 문서 검색**: 벡터 검색 + BM25를 RRF로 합침. 정확매칭된 새 경로로 질의 확장
 4. **재정렬**: 0.3 문서 가중치 감소, 목표 import를 쓰는 문서 가중치 증가, 페이지당 최대 2개
 
----
-
 ## 평가 방법
 
 같은 질문 30개를 **일반 LLM**과 **우리 챗봇**에 넣고 **LLM 없이 코드로** 채점해 비교하고(비교 평가), 팀이 정한 규칙대로 동작하는지 따로 점검합니다(자체 평가).
@@ -102,8 +103,6 @@ LLM은 모두 OpenAI `gpt-4o-mini`를 사용합니다.
 - **공통 채점 8항목** (두 답에 같은 잣대): 문법 · 옛 import 없음 · import 실제 존재(1.x 도구 목록) · 정의 안 된 이름 없음 · 결과값 보존 · 남은 import 없음 · 정답 import 포함 · 실제로 바꿈 → 8개 모두 통과해야 '공통 기준 통과'
 - **자체 평가 21항목 (100점)**: 질문 분류 · 분석 · 근거 검색 · 고쳐 쓰기 규칙 · 검증 루프 · 답변 규칙 · 안정성 (팀 프롬프트 · 코드에 적힌 규칙 그대로)
 - 실행: `python eval/run_eval.py` → 채점: `python eval/score.py` (자세히: [eval/README.md](eval/README.md))
-
----
 
 ## 결과
 
@@ -146,8 +145,6 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 | 답변 규칙 | 5.0 / 5 | | 검증 · 재시도 | 17.3 / 30 |
 | 안정성 · 속도 | 5.0 / 5 | | **합계** | **83.3** |
 
----
-
 ## 폴더 구조
 
 ```text
@@ -168,9 +165,6 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 ├── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
 └── 발표자료/                   # 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 · 평가 보고서 · 화면 캡처 · 이전버전/
 ```
-
-
----
 
 ## 시작하기
 
@@ -203,3 +197,9 @@ streamlit 실행:
 ```bash
 uv run streamlit run streamlit_app.py
 ```
+
+## 구현 화면
+
+코드 Migration 결과
+
+<img src="./docs/images/화면_기록/02_배포_예제_검증통과.png"/>
