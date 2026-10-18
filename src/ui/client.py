@@ -12,7 +12,6 @@ import os
 from .mock import run_mock
 from .optional import load
 from .versions import ALL_WITH_NEW, LATEST
-from src.graph.nodes.verifier_node import MAX_ATTEMPTS, route_after_verify
 
 TARGET_VERSIONS = ALL_WITH_NEW               # 어느 버전으로든 (옛 버전으로 되돌리기 포함)
 GRAPH_KEYS = ("OPENAI_API_KEY", "CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
@@ -218,7 +217,11 @@ def _step_message(node: str, upd: dict) -> tuple[str, str, list[str]]:
         if unresolved:
             details.append(f"근거가 부족해 그대로 둔 줄 {len(unresolved)}곳")
         return f"③ {len(changes)}곳 고침", "④ 검사하는 중", details
-        if node == "verifier":
+    if node == "verifier":
+        # 그래프와 같은 함수로 다음 경로를 판단한다 (화면 문구와 실제 동작이 어긋나지 않게).
+        # 그래프를 쓸 수 없는 환경에서도 이 파일이 깨지지 않도록 맨 위가 아니라 여기서 불러온다.
+        from src.graph.nodes.verifier_node import MAX_ATTEMPTS, route_after_verify
+
         v, n = upd.get("verify_result") or {}, upd.get("attempt", 0)
         warns = v.get("warnings") or []
         if v.get("passed"):
