@@ -6,7 +6,9 @@
        - 재시도면 이전 시도에서 인용한 근거를 항상 포함한다(pin). 통과했던 줄의 근거가 빠지면 같은 ID를 다시 달 수 없어 검증이 계속 실패하기 때문이다.
     3. LLM을 구조화 출력(RewriteResult)으로 호출한다
        - 필드 누락 같은 일시적 오류는 한 번 재시도하고, 그래도 실패하면 원본 코드를 돌려준다 (노드 하나의 예외로 그래프 전체가 멈추지 않게 하려고)
-    4. 후처리(코드펜스·줄 번호 접두어 제거, 변환 후 안 쓰는 import 삭제, 설치 패키지 계산)는 LLM이 아니라 코드로 한다
+    4. 후처리(코드펜스·줄 번호 접두어 제거, 변환 후 안 쓰는 import 삭제, 변경 기록을 실제 diff에 맞추기, 설치 패키지 계산)는
+       LLM이 아니라 코드로 한다
+       - 무엇이 바뀌었는지(줄·줄 번호)는 difflib로 계산하고, LLM 기록에서는 근거 ID와 이유만 가져온다(reconcile_changes)
     5. new_code, changes, unresolved, rewrite_notes, install_packages, shown_evidence_ids, rewrite_failed를 돌려준다
 
 state.py
@@ -16,6 +18,7 @@ state.py
 """
 
 import ast
+import difflib
 import json
 import os
 import re
@@ -297,6 +300,49 @@ def drop_leftover_imports(old_code: str, new_code: str, changes: list[dict]) -> 
     return new_code, changes, dropped
 
 
+def _norm_with_lineno(text: str) -> list[tuple[int, str]]:
+    """verifier의 _norm_lines와 같은 기준(앞뒤 공백 제거, 빈 줄 제외) + 원래 줄 번호."""
+    return [(i, line.strip()) for i, line in enumerate(text.splitlines(), 1) if line.strip()]
+
+
+def reconcile_changes(old_code: str, new_code: str, changes: list[dict]) -> tuple[list[dict], int]:
+    """LLM이 적은 changes를 실제 diff 단위(hunk)로 다시 맞춘다.
+
+    왜: 재시도 때 LLM이 '이전 결과 대비 차이'만 적거나, import 한 줄에 새 체인 두 줄을 짝짓거나,
+        줄 번호를 잘못 세서 unrecorded_change / old_line_mismatch로 3회 모두 실패했다(회의록 예제).
+        코드는 맞는데 기록이 틀려서 실패하는 '거짓 실패'였다.
+    방법: 무엇이 바뀌었는지(old · new · 줄 번호)는 difflib로 계산하고, LLM 기록에서는 근거 ID와 이유만 가져온다.
+    안전장치: 어떤 기록과도 겹치지 않는 hunk는 evidence_ids=[] → verifier 2번(missing_evidence)이 잡는다.
+              즉 '근거 없는 변경'을 막는 기능은 그대로 남는다.
+    반환: (새 changes, 기록이 없던 hunk 수)"""
+    old_n, new_n = _norm_with_lineno(old_code), _norm_with_lineno(new_code)
+    a, b = [s for _, s in old_n], [s for _, s in new_n]
+
+    by_line: dict[str, list[int]] = {}   # 줄 → 그 줄을 언급한 기록 번호들
+    for idx, c in enumerate(changes):
+        for _, s in _norm_with_lineno((c.get("old") or "") + "\n" + (c.get("new") or "")):
+            by_line.setdefault(s, []).append(idx)
+
+    out, uncovered = [], 0
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        old_lines, new_lines = a[i1:i2], b[j1:j2]
+        src = sorted({idx for s in old_lines + new_lines for idx in by_line.get(s, [])})
+        ids = sorted({eid for idx in src for eid in (changes[idx].get("evidence_ids") or [])})
+        reasons = list(dict.fromkeys(changes[idx]["reason"].strip() for idx in src if changes[idx].get("reason")))
+        if not src:
+            uncovered += 1
+        out.append({
+            "old_line": old_n[i1][0] if old_lines else None,   # 원본 기준 줄 번호 (LLM이 센 번호 대신)
+            "old": "\n".join(old_lines),
+            "new": "\n".join(new_lines),
+            "evidence_ids": ids,
+            "reason": " / ".join(reasons) or "변경 기록에 없던 수정입니다. 근거 확인이 필요합니다.",
+        })
+    return out, uncovered
+
+
 def required_packages(code: str) -> list[str]:
     """new_code의 import에서 pip 패키지명을 계산한다. langchain_openai → langchain-openai.
     LLM에게 맡기지 않는 이유: 패키지명 오타는 설치 실패로 바로 이어진다."""
@@ -383,6 +429,12 @@ def rewrite(
     new_code, changes, dropped = drop_leftover_imports(old_code, new_code, changes)
     if dropped:
         notes.append(f"변환 후 쓰지 않게 된 import를 삭제했습니다: {', '.join(dropped)}")
+
+    # 변경 기록을 실제 diff에 맞춘다. 이번 기록 + 이전 시도 기록에서 근거를 가져온다
+    # (재시도 때 LLM이 '이번에 바꾼 곳'만 적어도 앞서 고친 줄의 근거를 잃지 않게. 이전 근거는 1번에서 pin해 이번에도 보여 줌)
+    changes, uncovered = reconcile_changes(old_code, new_code, changes + prev_changes)
+    if uncovered:
+        print(f"[rewriter] 근거 기록이 없는 변경 {uncovered}곳 → verifier가 missing_evidence로 잡음", file=sys.stderr)
 
     return {
         "new_code": new_code,
