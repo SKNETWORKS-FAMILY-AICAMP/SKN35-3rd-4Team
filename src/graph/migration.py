@@ -19,12 +19,13 @@ def migration():
     builder.add_edge("retriever", "rewriter")
     builder.add_edge("rewriter", "verifier")
 
-    # 검증 결과에 따른 분기: 실패면 retriever로 되돌아가 근거를 다시 찾기 
+    # 검증 결과에 따른 분기: 
+    # 실패면 retriever로 되돌아가 근거를 다시 찾기 
+    # 근거와 상관없는 오류만 검색 없이 rewriter로 바로 다시 고치기
     builder.add_conditional_edges(
-        "verifier",
+        "verifier", 
         route_after_verify,
-        {"retry": "retriever", "done": END},
-    )
+        {"retry": "retriever", "rewrite": "rewriter", "done": END})
 
     app = builder.compile()
     

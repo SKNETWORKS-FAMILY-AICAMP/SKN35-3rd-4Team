@@ -12,6 +12,7 @@ import os
 from .mock import run_mock
 from .optional import load
 from .versions import ALL_WITH_NEW, LATEST
+from src.graph.nodes.verifier_node import MAX_ATTEMPTS, route_after_verify
 
 TARGET_VERSIONS = ALL_WITH_NEW               # 어느 버전으로든 (옛 버전으로 되돌리기 포함)
 GRAPH_KEYS = ("OPENAI_API_KEY", "CHROMA_API_KEY", "CHROMA_TENANT", "CHROMA_DATABASE")
@@ -217,7 +218,7 @@ def _step_message(node: str, upd: dict) -> tuple[str, str, list[str]]:
         if unresolved:
             details.append(f"근거가 부족해 그대로 둔 줄 {len(unresolved)}곳")
         return f"③ {len(changes)}곳 고침", "④ 검사하는 중", details
-    if node == "verifier":
+        if node == "verifier":
         v, n = upd.get("verify_result") or {}, upd.get("attempt", 0)
         warns = v.get("warnings") or []
         if v.get("passed"):
@@ -226,10 +227,13 @@ def _step_message(node: str, upd: dict) -> tuple[str, str, list[str]]:
         errors = v.get("errors") or []
         details = [f"걸린 검사: {', '.join(_error_names(errors))}"]
         details += [_short(e.get("message"), 90) for e in errors[:2]]
-        if n >= 3:
-            return f"④ 검사 {n}회차 실패 ({len(errors)}건) · 최대 3회라 여기서 멈춤", "결과 정리하는 중", details
-        return (f"④ 검사 {n}회차 실패 ({len(errors)}건) → 실패 이유를 들고 근거를 다시 찾아요",
-                "② 근거 다시 찾는 중", details)
+        head = f"④ 검사 {n}회차 실패 ({len(errors)}건)"
+        route = route_after_verify({"verify_result": v, "attempt": n})
+        if route == "done":
+            return f"{head} · 최대 {MAX_ATTEMPTS}회라 여기서 멈춤", "결과 정리하는 중", details
+        if route == "rewrite":
+            return f"{head} → 근거는 그대로 두고 바로 다시 고쳐요", "③ 코드 다시 고치는 중", details
+        return f"{head} → 실패 이유를 들고 근거를 다시 찾아요", "② 근거 다시 찾는 중", details
     if node == "search":
         return "문서에서 답을 찾았어요", "정리하는 중", ["찾은 문서 조각만 근거로 답하고, 끝에 출처를 붙여요"]
     if node == "general":
