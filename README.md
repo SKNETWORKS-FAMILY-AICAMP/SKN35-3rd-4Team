@@ -148,22 +148,22 @@ print(chain.run(word='크다'))                       print(chain.invoke({'word'
 ## 폴더 구조
 
 ```text
-├── streamlit_app.py            # (4번) 화면 입구: 로그인 · 대화 목록 · 진행 표시 · 결과 패널
-├── app.py · check_nodes.py     # (1번) 그래프 실행 시험 · (3번) 노드 하나씩 점검
+├── streamlit_app.py            # 화면 입구: 로그인 · 대화 목록 · 진행 표시 · 결과 패널
+├── app.py · check_nodes.py     # 그래프 실행 시험 · 노드 하나씩 점검
 ├── src/
 │   ├── graph/
-│   │   ├── supervisor.py       # (1번) 최상위 그래프: classifier → migration · search · general
-│   │   ├── migration.py        # (1번) 변환 파이프라인: analyzer → retriever → rewriter → verifier (재시도)
-│   │   ├── state.py            # (3번 · 2번) MigrationState
-│   │   └── nodes/              # classifier · general · analyzer (1번) / retriever · search (2번) / rewriter · verifier (3번)
-│   ├── prompt/                 # analyzer · classifier · general (1번) / search (2번) / rewriter (3번)
-│   ├── rag/                    # (2번) docs_collect · import_map(대응표 · 목표 버전 판정) · chunking · embedding · retrieval
-│   └── ui/                     # (4번) client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py
-├── data/                       # (2번) raw/(문서 · 버전별 도구 목록 42개 · CLI 규칙) · processed/(대응표 · 메서드 대응표 · 청크)
-├── eval/                       # (4번) questions.json(36) · route_probes.json(14) · run_eval.py · score.py · results/
-├── tools/bot_check.py          # (4번) 화면 · DB 자동 점검 19가지
-├── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images/
-└── 발표자료/                   # 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 · 평가 보고서 · 화면 캡처 · 이전버전/
+│   │   ├── supervisor.py       # 최상위 그래프: classifier → migration · search · general
+│   │   ├── migration.py        # 변환 파이프라인: analyzer → retriever → rewriter → verifier (재시도)
+│   │   ├── state.py            # MigrationState
+│   │   └── nodes/              # classifier · general · analyzer / retriever · search / rewriter · verifier
+│   ├── prompt/                 # analyzer · classifier · general / search / rewriter
+│   ├── rag/                    # docs_collect · import_map(대응표 · 목표 버전 판정) · chunking · embedding · retrieval
+│   └── ui/                     # client.py(그래프 호출 · 진행 표시) · result_view.py(결과 패널) · db.py(TiDB) · mock.py
+├── data/                       # raw/(문서 · 버전별 도구 목록 42개 · CLI 규칙) · processed/(대응표 · 메서드 대응표 · 청크)
+├── eval/                       # questions.json(36) · route_probes.json(14) · run_eval.py · score.py · results
+├── tools/bot_check.py          # 화면 · DB 자동 점검 19가지
+├── docs/                       # 최종 보고서 · 평가 결과와 개선 방안 · DB 설계 · 화면 실행 방법 · 머지 가이드 · images
+└── 발표자료/                    # 발표 PPT · 대본 · 프로젝트 최종 보고서 · 테스트 · 평가 보고서 · 화면 캡처 · 이전버전
 ```
 
 ## 시작하기
